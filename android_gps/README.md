@@ -1,6 +1,6 @@
-Android app
+# Android app
 
-requirements
+## Requirements - 
 
 - [ ] Bluetooth communication with laptop hosting mataki base
 - [ ] Map display of current position and in-coming GPS coords
