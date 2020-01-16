@@ -1,5 +1,3 @@
-REM Script for receiver tag to wake up sender tags and relay GPS fixes
-
 10   REM =================================================
 20   REM ===    Receiver script for for Mataki-Lite    ===
 30   REM === Wakes up sender tags and relays GPS fixes ===
