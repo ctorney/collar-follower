@@ -10,9 +10,10 @@
 110    fixinterval = 10 * 60       : REM 10 mins between fixes
 120    firstfixsearchtime = 4 * 60 : REM Leave GPS on for max. 4 mins to get first fix
 130    fixsearchtime = 30          : REM Leave GPS on for max. 30 secs to get subsequent fixes
-140    gpsmode = 1                 : REM Automatic mode: Get a fix and log it
+140    gpsmode = 2                 : REM Automatic mode: Get a fix and log it
 150  REM *** Radio Settings ***
-160    radiointerval = 30 * 60 : REM 30 mins between base contact attempts
+160    radiointerval = 60 * 60 : REM 30 mins between base contact attempts
+165    radiosearchtime = 30 : REM 30 mins between base contact attempts
 170    PRINT "GPS Fix interval    : "; fixinterval / 60 ;" minutes"
 180    PRINT "Base Radio interval : "; radiointerval / 60 ;" minutes"
 190  REM *** Startup state ***
@@ -24,13 +25,27 @@
 250    sleeptime = 10
 260    radioled = 1
 299  REM *** Main Loop ***
-300    IF CLOCK >= fixtime THEN GOSUB 1000
-310    IF CLOCK >= radiotime THEN GOSUB 2000
-320  REM *** Enter low power mode for a maximum of <sleeptime> seconds ***
-330    _SLEEP = sleeptime
+300    IF MOD(CLOCK,radiointerval) < 2*sleeptime THEN GOSUB 1000
+310  REM *** Enter low power mode for a maximum of <sleeptime> seconds ***
+320    _SLEEP = sleeptime
 360    GOTO 300
-999  REM *** Try to get a GPS Fix ****
-1000   PRINT TIME$ ;" GPS On"
+999  REM *** Check my messages ****
+1000   PRINT TIME$ ;" Radio On"
+1005   endtime = CLOCK + radiosearchtime
+1010   _RADCHAN = 29
+1020   _RADSPEED = 2
+1030   _RADIO = 2
+1040   REPEAT
+1050   r$ = _RADMSG$
+1060   UNTIL r$ <> "" OR (CLOCK > endtime)
+1070   IF r$ == "PINGPONG" GOSUB 2000
+1080   _RADIO = 0
+1090   RETURN
+1999 REM *** There's someone out there ****
+2000   _RADTXPWR = 10
+2010   _RADMSG$ = "PONGPING"
+60 DELAY 2
+70 GOTO 50
 1020   IF fixes = 0 GOSUB 1200 ELSE GOSUB 1400
 1100   _GPS = 0
 1110   IF _FIXVALID = 0 THEN 1120
