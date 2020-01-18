@@ -11,8 +11,8 @@
 130    gpsoff = -1                 : REM Deep GPS sleep
 140    gpson  = 2                 : REM Automatic mode: Get a fix and don't log it
 150  REM *** Radio Settings ***
-160    radiointerval = 60 * 60 : REM 60 mins between base contact attempts
-165    radiosearchtime = 120 : REM 30 seconds searching 
+160    radiointerval = 3 * 60 : REM 60 mins between base contact attempts
+165    radiosearchtime = 120 : REM 2 mins searching 
 170    PRINT "GPS Fix interval    : "; fixinterval / 60 ;" minutes"
 180    PRINT "Base Radio interval : "; radiointerval / 60 ;" minutes"
 190  REM *** Startup state ***
@@ -22,8 +22,9 @@
 270    waittime = 3 * 60
 280    listentime = 3
 299  REM *** Main Loop ***
-300    IF MOD(CLOCK,radiointerval) < 2*sleeptime THEN GOSUB 1000
+300    IF CLOCK MOD radiointerval < 2*sleeptime THEN GOSUB 1000
 310  REM *** Enter low power mode for a maximum of <sleeptime> seconds ***
+315    PRINT STR$(CLOCK MOD radiointerval); "SLEEPING.."
 320    _SLEEP = sleeptime
 360    GOTO 300
 999  REM *** Check my messages ****
@@ -34,9 +35,10 @@
 1030   _RADIO = 2
 1040   REPEAT
 1050   r$ = _RADMSG$
-1060   IF r$ == "PINGPONG" THEN GOSUB 2000
+1060   IF r$ = "PINGPONG" THEN GOSUB 2000
 1070   UNTIL CLOCK > stopsearchtime
 1080   _RADIO = 0
+1085   PRINT TIME$ ;" Radio Off"
 1090   RETURN
 1999 REM *** There's someone out there ****
 2000   _RADTXPWR = 10
@@ -59,7 +61,7 @@
 2160     recvtime = CLOCK + listentime
 2170     REPEAT
 2180       r$ = _RADMSG$
-2190       IF r$=="OK" THEN endtime = CLOCK + waittime
+2190       IF r$ = "OK" THEN endtime = CLOCK + waittime
 2200     UNTIL CLOCK > recvtime
 2210     DELAY fixinterval-listentime
 2220   UNTIL CLOCK > endtime 
