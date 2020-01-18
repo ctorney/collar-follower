@@ -23,6 +23,7 @@
 280    listentime = 3
 299  REM *** Main Loop ***
 300    IF CLOCK MOD radiointerval < 2*sleeptime THEN GOSUB 1000
+301  GOSUB 1000
 310  REM *** Enter low power mode for a maximum of <sleeptime> seconds ***
 315    PRINT STR$(CLOCK MOD radiointerval); "SLEEPING.."
 320    _SLEEP = sleeptime
@@ -35,13 +36,16 @@
 1030   _RADIO = 2
 1040   REPEAT
 1050   r$ = _RADMSG$
+1055   IF r$ <> "" THEN PRINT r$
 1060   IF r$ = "PINGPONG" THEN GOSUB 2000
+1066   IF r$ = "Hello" THEN GOSUB 2000
 1070   UNTIL CLOCK > stopsearchtime
 1080   _RADIO = 0
 1085   PRINT TIME$ ;" Radio Off"
 1090   RETURN
 1999 REM *** There's someone out there ****
 2000   _RADTXPWR = 10
+2001   PRINT "ENTERING RECEIVER MODE"
 2010   FOR x = 1 TO 10
 2020     _RADMSG$ = "PONGPING"
 2030     DELAY 1
@@ -57,11 +61,13 @@
 2130     t2 = CLOCK
 2140     endtime = t2 + (endtime - t1)
 2145     stopsearchtime = t2 + (stopsearchtime - t1)
-2150     _RADMSG$ = "FIX," + STR$(_ID) + "," + STR$(_FIXVALID)) + "," + STR$(_FIXLAT) + "," + STR$(_FIXLON) + "," + STR$(_FIXHDOP) + "," + STR$(_FIXSATS) 
+2146     MSG$ = "FIX," + STR$(_ID) + "," + STR$(_FIXVALID) + "," + STR$(_FIXLAT) + "," + STR$(_FIXLON) + "," + STR$(_FIXHDOP) + "," + STR$(_FIXSATS) 
+2147     PRINT MSG$  
+2150     _RADMSG$ = MSG$
 2160     recvtime = CLOCK + listentime
 2170     REPEAT
 2180       r$ = _RADMSG$
-2190       IF r$ = "OK" THEN endtime = CLOCK + waittime
+2190       IF r$ = "PINGPONG" THEN endtime = CLOCK + waittime
 2200     UNTIL CLOCK > recvtime
 2210     DELAY fixinterval-listentime
 2220   UNTIL CLOCK > endtime 
