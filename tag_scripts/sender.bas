@@ -18,7 +18,6 @@
 270    waittime = 3 * 60
 299  REM *** Main Loop ***
 300    IF CLOCK MOD radiointerval < 2*sleeptime THEN GOSUB 1000
-301    GOSUB 1000
 310  REM *** Enter low power mode for a maximum of <sleeptime> seconds ***
 315    PRINT STR$(CLOCK MOD radiointerval); "SLEEPING.."
 320    _SLEEP = sleeptime
@@ -46,9 +45,10 @@
 2040   _GPS = 2
 2050   t2 = CLOCK
 2060   stopsearchtime = t2 + (stopsearchtime - t1)
-2070   MSG$ = "FIX," + STR$(_ID) + "," + STR$(_FIXVALID) + "," + STR$(_FIXLAT) + "," + STR$(_FIXLON) + "," + STR$(_FIXHDOP) + "," + STR$(_FIXSATS) 
+2070   MSG$ = "FIX," + STR$(_ID) + "," + STR$(_FIXVALID) + "," + STR$(_FIXLAT) + "," + STR$(_FIXLON) + "," + STR$(_FIXHDOP) + "," + STR$(_FIXSATS) + "," + STR$(_Vbatt)
 2080   PRINT MSG$  
 2090   _RADTXPWR = 10
 2100   _RADIO = 2
 2110   _RADMSG$ = MSG$
-2120   RETURN
+2120   DELAY 2
+2130   RETURN

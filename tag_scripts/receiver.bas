@@ -13,9 +13,8 @@
 150   _RADIO = 2
 199  REM *** Main loop ***
 200   _RADMSG$ = "M_PING"
-201   _LED = 1
 210   DELAY 0.5
 211   _LED = 0
 220   r$ = _RADMSG$
-230   IF r$ <> "" THEN PRINT r$; "," ; TIME$
+230   IF r$ <> "" THEN _LED = 1 : PRINT r$; "," ; TIME$
 240   GOTO 200
