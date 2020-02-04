@@ -45,8 +45,8 @@
 2040   _GPS = 2
 2050   t2 = CLOCK
 2060   stopsearchtime = t2 + (stopsearchtime - t1)
-2065   LAT$ = STR$(FIX(_FIXLAT)) + MID$(STR$(_FIXLAT-FIX(_FIXLAT)),2,7) : REM build string separately to ensure 6 digits precision
-2066   LON$ = STR$(FIX(_FIXLON)) + MID$(STR$(_FIXLON-FIX(_FIXLON)),2,7) : REM build string separately to ensure 6 digits precision
+2065   LAT$ = STR$(FIX(_FIXLAT)) + MID$(STR$(ABS(_FIXLAT-FIX(_FIXLAT))),2,7) : REM build string separately to ensure 6 digits precision
+2066   LON$ = STR$(FIX(_FIXLON)) + MID$(STR$(ABS(_FIXLON-FIX(_FIXLON))),2,7) : REM build string separately to ensure 6 digits precision
 2070   MSG$ = "FIX," + STR$(_ID) + "," + STR$(_FIXVALID) + "," + LAT$  + "," + LON$ + "," + STR$(_FIXHDOP) + "," + STR$(_FIXSATS) + "," + STR$(_Vbatt)
 2080   PRINT MSG$  
 2090   _RADTXPWR = 10
