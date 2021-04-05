@@ -32,7 +32,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 
 # (list) Application requirements
-requirements = python3, kivy, plyer, android, oscpy
+requirements = python3, kivy, plyer, android, oscpy, asyncio, async_to_sync, able_recipe
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/data/presplash.png
@@ -46,17 +46,19 @@ orientation = landscape
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
 
-services = GPS:service/main.py
+#services = GPS:service/main.py
+services = Myservice:service.py
 
 #
 # Android specific
 #
 
 # (list) Permissions
-android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,ACCESS_MOCK_LOCATION
+android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,ACCESS_MOCK_LOCATION,BLUETOOTH,ACCESS_BACKGROUND_LOCATION,BLUETOOTH_ADMIN
 
 # (int) Android API to use
 #android.api = 14
+android.arch = armeabi-v7a
 
 # (int) Minimum API required (8 = Android 2.2 devices)
 #android.minapi = 8
@@ -88,6 +90,7 @@ android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,ACCES
 # (list) List of Java files to add to the android project (can be java or a
 # directory containing the files)
 #android.add_src =
+#android.add_src = bleak/java/PythonScanCallback.java, bleak/java/PythonBluetoothGattCallback.java
 
 # (str) python-for-android branch to use, if not master, useful to try
 # not yet merged features.
@@ -116,6 +119,9 @@ android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,ACCES
 # (list) Android library project to add (will be added in the
 # project.properties automatically.)
 #android.library_references =
+android.allow_backup = True
+#p4a.branch = develop
+#p4a.local_recipes = bleak/bleak/backends/p4android/recipes
 
 #
 # iOS specific
