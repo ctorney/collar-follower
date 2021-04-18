@@ -28,8 +28,10 @@ from datetime import datetime
 from oscpy.server import OSCThreadServer
 #from bleak import BleakScanner, BleakClient
 
-UART_TX_CHAR_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-UART_RX_CHAR_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+from ble import BLE
+
+from android.runnable import run_on_ui_thread
+
 class gui(BoxLayout):
 
     def __init__(self, gps_switch_callback, ble_switch_callback, **kwargs):
@@ -67,79 +69,6 @@ class gui(BoxLayout):
         self.scrollview.add_widget(self.messages)
         self.add_widget(self.scrollview)
 
-
-
-
-from able import BluetoothDispatcher, GATT_SUCCESS
-#from error_message import install_exception_handler
-autoclass('org.jnius.NativeInvocationHandler')
-
-from android.runnable import run_on_ui_thread
-
-class BLE(BluetoothDispatcher):
-
-    device = alert_characteristic = None#
-
-    def __init__(self):
-        super(BLE, self).__init__()
-
-    def start_alert(self, *args, **kwargs):
-        #if self.alert_characteristic:  # alert service is already discovered
-        #    self.alert(self.alert_characteristic)
-        #elif self.device:  # device is already founded during the scan
-        #    self.connect_gatt(self.device)  # reconnect
-        #else:
-        #    self.stop_scan()  # stop previous scan
-        self.start_scan()  # start a scan for devices#
-
-    def on_device(self, device, rssi, advertisement):
-        # some device is found during the scan
-        name = device.getName()
-        if name and name.startswith('Bluefruit'):  # is a Mi Band device
-
-            print('got a device:', device.name)
-            self.device = device
-            self.stop_scan()
-
-    def on_scan_completed(self):
-        if self.device:
-            self.connect_gatt(self.device)  # connect to device
-
-    def on_connection_state_change(self, status, state):
-        if status == GATT_SUCCESS and state:  # connection established
-            self.discover_services()  # discover what services a device offer
-        else:  # disconnection or error
-            self.alert_characteristic = None
-            self.close_gatt()  # close current connection
-
-    def on_services(self, status, services):
-        # 0x2a06 is a standard code for "Alert Level" characteristic
-        # https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.alert_level.xml
-        print(services)
-        self.tx_characteristic = services.search(UART_TX_CHAR_UUID)
-        self.rx_characteristic = services.search(UART_RX_CHAR_UUID)
-        self.enable_notifications(self.tx_characteristic)
-        #print(self.alert_characteristic)
-        self.alert()#self.alert_characteristic)
-
-    def on_characteristic_read(self, characteristic, status):
-        if status == GATT_SUCCESS:  # connection established
-            aa = characteristic.getValue()#.decode())#, [2])  # 2 is for "High Alert"
-            print(aa)
-
-    def on_characteristic_changed(self, characteristic):
-        value = characteristic.getValue()
-        print(bytes(value).decode())
-
-    def alert(self):
-        print('do nothing')
-        print(self.write_characteristic(self.rx_characteristic, [2]))  # 2 is for "High Alert"
-        #while True:
-        #    self.read_characteristic(self.tx_characteristic)#, [2])  # 2 is for "High Alert"
-            #aa = self.tx_characteristic.getValue()#.decode())#, [2])  # 2 is for "High Alert"
-            #if aa:
-            #    print(aa.decode())#, [2])  # 2 is for "High Alert"
-        #    sleep(0.1)
 
 
 
@@ -198,6 +127,7 @@ class collarFollower(App):
         self.osc = OSCThreadServer()
         self.sock = self.osc.listen(address=b'localhost', port=3001, default=True)
         self.osc.bind(b'/msg', self.service_msg_callback)
+        self.osc.bind(b'/ble', self.ble_msg_callback)
 
         self.ble = BLE()
  
@@ -210,7 +140,11 @@ class collarFollower(App):
     def gps_switch_callback(self, switchObject, switchValue):
 
         #print('Value of gps settings is:', switchValue)
-        self.client.send_message(b'/gpsbutton', [switchValue])
+        if self.root.ble_switch.active:
+            self.client.send_message(b'/gpsbutton', [switchValue])
+        elif switchValue:
+            self.write_msg('Unable to start GPS spoofing. No Bluetooth connected')
+            self.root.gps_switch.active=False
 
 
     #@run_on_ui_thread
@@ -224,10 +158,20 @@ class collarFollower(App):
  #               self.write_msg('Bluetooth is currently inactive. Please enable in order to connect.')
  #               self.root.ble_switch.active=False
  #               return
-        self.ble.start_alert()
+        if switchValue:
+            self.ble.connect()
+        else:
+            self.ble.disconnect()
+            self.root.gps_switch.active=False
 
         #self.client.send_message(b'/blebutton', [switchValue])
 
+
+    def ble_msg_callback(self,values):
+        self.write_msg(values.decode())
+        if values.decode().startswith('No device'):
+            self.root.ble_switch.active=False
+            self.root.gps_switch.active=False
 
     def service_msg_callback(self,values):
         self.write_msg(values.decode())
