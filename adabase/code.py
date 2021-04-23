@@ -26,6 +26,7 @@ from time import sleep
 
 from adafruit_display_text import label
 import adafruit_displayio_sh1107
+from digitalio import DigitalInOut, Direction, Pull
 
 from adafruit_ble import BLERadio
 from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
@@ -74,6 +75,10 @@ Initialise the display
 # LED display
 displayio.release_displays()
 
+button_A = DigitalInOut(board.D9)
+button_A.direction = Direction.INPUT
+button_A.pull = Pull.UP
+
 # Use for I2C
 i2c = board.I2C()
 display_bus = displayio.I2CDisplay(i2c, device_address=0x3C)
@@ -88,13 +93,16 @@ color_bitmap = displayio.Bitmap(WIDTH, HEIGHT, 1)
 color_palette = displayio.Palette(1)
 color_palette[0] = 0x000000 # black 
 
+bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0)
+
+splash.append(bg_sprite)
+
+text_area = label.Label(terminalio.FONT, text='Starting....', color=0xFFFFFF, x=8, y=8)
+splash.append(text_area)
+
 def screen_write(text=""):
-    bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0)
 
-    splash.append(bg_sprite)
-
-    text_area = label.Label(terminalio.FONT, text=text, color=0xFFFFFF, x=8, y=8)
-    splash.append(text_area)
+    splash[1] = label.Label(terminalio.FONT, text=text, color=0xFFFFFF, x=8, y=8)
 
 
 """
@@ -132,6 +140,7 @@ Send a sleep message to the active tag
 """
 def send_sleep(collar_id):
     # send a sleep message 5 times
+    screen_write("Sending collar\nid:" + str(collar_id) + " back\nto sleep.")
     for i in range(5):
         rfm9x.send(bytes(SLEEP+str(collar_id), "UTF-8"))
         sleep(1)
@@ -144,7 +153,7 @@ Forward all messages received from the tag to the connected bluetooth device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 def forward_mode(collar_id):
-    screen_write("Connected to\ncollar id:\n" + str(collar_id))
+    screen_write("Connected to\ncollar id:\n" + str(collar_id) + ". Press and hold A\nto disconnect")
 
     timeout_count = 0
     while True:
@@ -162,6 +171,9 @@ def forward_mode(collar_id):
                     break
                 rfm9x.send(bytes(ACK, "UTF-8"))
         if timeout_count>COLLAR_TIME_OUT:
+            send_sleep(collar_id)
+            break
+        if not button_A.value:
             send_sleep(collar_id)
             break
 
