@@ -20,6 +20,7 @@ forward fixes over bluetooth to an android tablet.
 """
 
 import board
+import busio
 import displayio
 import terminalio
 from time import sleep
@@ -27,6 +28,7 @@ from time import sleep
 from adafruit_display_text import label
 import adafruit_displayio_sh1107
 from digitalio import DigitalInOut, Direction, Pull
+import digitalio
 
 from adafruit_ble import BLERadio
 from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
@@ -35,6 +37,7 @@ from adafruit_ble.services.nordic import UARTService
 from adafruit_bluefruit_connect.packet import Packet
 from adafruit_bluefruit_connect.button_packet import ButtonPacket
 
+import adafruit_rfm9x
 
 """
 Constant parameters
@@ -51,7 +54,7 @@ ACK = "BASE,ACK"            # acknowledge receipt of message and tell tag to pro
 
 # RADIO
 RADIO_FREQ_MHZ = 868.0
-TX_POWER = 23
+MAX_TX_POWER = 23
 
 NO_COLLAR = -1              # ID to return if no collar is found
 COLLAR_TIME_OUT = 10        # how long to wait before giving up on a collar
@@ -60,8 +63,6 @@ COLLAR_TIME_OUT = 10        # how long to wait before giving up on a collar
 Initialise the bluetooth device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
-# Bluetooth device
 ble = BLERadio()
 uart = UARTService()
 advertisement = ProvideServicesAdvertisement(uart)
@@ -71,8 +72,6 @@ advertisement = ProvideServicesAdvertisement(uart)
 Initialise the display
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
-# LED display
 displayio.release_displays()
 
 button_A = DigitalInOut(board.D9)
@@ -109,7 +108,18 @@ def screen_write(text=""):
 Initialise the LORA radio
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
 
+# Define pins connected to the chip - this needs some wiring on the LoRa featherwing
+# CS needs to be wired to B and RST needs to be wired to A and soldered in 
+CS = digitalio.DigitalInOut(board.D10)
+RESET = digitalio.DigitalInOut(board.D11)
+
+# Initialze RFM radio
+rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
+
+# Set to max transmit power!
+rfm9x.tx_power = MAX_TX_POWER
 
 
 
@@ -128,7 +138,7 @@ def send_wakeup():
     if packet is not None:
         txtpacket = packet.decode()
         txtpacket = txtpacket.split(",")
-        if txtpacket[1]="AWAKE":
+        if txtpacket[1]=="AWAKE":
             collar_id = int(txtpacket[0])
     return collar_id
 
