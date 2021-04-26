@@ -39,6 +39,7 @@ from adafruit_bluefruit_connect.button_packet import ButtonPacket
 
 import adafruit_rfm9x
 
+DEBUG = 1                   # In debug mode we just listen and forward
 """
 Constant parameters
 """
@@ -166,20 +167,29 @@ def forward_mode(collar_id):
     screen_write("Connected to\ncollar id:\n" + str(collar_id) + ". Press and hold A\nto disconnect")
 
     timeout_count = 0
-    while True:
+    while ble.connected:
         timeout_count+=1
         packet = rfm9x.receive(timeout=1.0)
         if packet is not None:
-            txtpacket = packet.decode()
-            txtpacket = txtpacket.split(",")
-            if collar_id == int(txtpacket[0]):
-                timeout_count = 0
-                try:
-                    uart.write(packet)
-                except:
-                    # any errors with the bluetooth we'll exit and try and reconnect
-                    break
-                rfm9x.send(bytes(ACK, "UTF-8"))
+            rfm9x.send(bytes(ACK, "UTF-8"))             # acknowledge receipt of message
+            try:
+                txtpacket = packet.decode("UTF-8")
+                print(txtpacket)
+                if txtpacket.startswith('GPS'):
+                    txtpacket = txtpacket.split(",")
+                    try:
+                        uart.write(bytes('LAT,'+txtpacket[1], "UTF-8"))
+                        uart.write(bytes('LON,'+txtpacket[2], "UTF-8"))
+                    except:
+                        # any errors with the bluetooth we'll exit and try and reconnect
+                        break
+
+                else:
+                    uart.write(bytes(txtpacket, "UTF-8"))
+            except:
+                pass
+        if DEBUG: 
+            continue                                    # in debug mode we will keep listening
         if timeout_count>COLLAR_TIME_OUT:
             send_sleep(collar_id)
             break
@@ -207,11 +217,16 @@ while True:
     screen_write("Bluetooth\nconnected.\nScanning...")
     # Now we're connected
     while ble.connected:
+        # send wake-up
         collar_id = send_wakeup()
 
-        if collar_id!=NO_COLLAR:
-            forward_mode(collar_id)
         
-        # wait 5 seconds before trying again
+        # enter msg forwarding if we've found a collar or we're in debug mode
+        if collar_id!=NO_COLLAR or DEBUG:
+            forward_mode(collar_id)
+
+        # wait 5 seconds between wake up messages
         sleep(5) 
+
+        
 
