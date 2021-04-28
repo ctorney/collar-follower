@@ -1,3 +1,16 @@
+# Copyright 2021 Colin Torney
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 #import kivy
 from kivy.app import App
@@ -20,19 +33,6 @@ import android
 
 #Global = autoclass('android.provider.Settings$Global')
 
-# Copyright 2021 Colin Torney
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 
 from kivy.core.window import Window
@@ -127,11 +127,12 @@ class collarFollower(App):
 
     def gps_switch_callback(self, switchObject, switchValue):
 
-        #print('Value of gps settings is:', switchValue)
-        if self.root.ble_switch.active:
+        print('Value of gps settings is:', switchValue)
+        print('Value of ble.connected is:', self.ble.connected)
+        if self.ble.connected:
             self.client.send_message(b'/gpsbutton', [switchValue])
         elif switchValue:
-            self.write_msg('Unable to start GPS spoofing. No Bluetooth connected')
+            self.write_msg('Unable to spoof GPS. No Bluetooth connected')
             self.root.gps_switch.active=False
 
 

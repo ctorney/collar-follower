@@ -16,6 +16,7 @@ class BLE(BluetoothDispatcher):
         super(BLE, self).__init__()
         self.gps_client = OSCClient(b'localhost', 3000)
         self.app_client = OSCClient(b'localhost', 3001)
+        self.connected=False
 
     
     def connect(self):
@@ -35,6 +36,8 @@ class BLE(BluetoothDispatcher):
         self.stop_scan()
         self.close_gatt()  # close current connection
         self.device = None
+        self.connected=False
+        self.send_app_msg('No device: Disconnected from Bluetooth') 
 
     def on_scan_completed(self):
         if self.device:
@@ -46,13 +49,14 @@ class BLE(BluetoothDispatcher):
         if status == GATT_SUCCESS and state:  # connection established
             self.send_app_msg('Connected to device ' + self.device.name) 
             self.discover_services()  # discover what services a device offer
+            self.connected=True
         else:  # disconnection or error
             self.send_app_msg('No device: Disconnected from Bluetooth') 
             self.close_gatt()  # close current connection
+            self.connected=False
 
     def on_services(self, status, services):
         self.tx_characteristic = services.search(UART_TX_CHAR_UUID)  # get device transmitter 
-        
         # self.rx_characteristic = services.search(UART_RX_CHAR_UUID)  # get device receiver (in case we want to send messages in future)
         self.enable_notifications(self.tx_characteristic)   # listen for any message transmitted
 
@@ -63,7 +67,7 @@ class BLE(BluetoothDispatcher):
 
     def send_app_msg(self, text):
         # send log messages back to the main app
-        self.app_client.send_message(b'/msg', [text.encode()])
+        self.app_client.send_message(b'/ble', [text.encode()])
 
 
 

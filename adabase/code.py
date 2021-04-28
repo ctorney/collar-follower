@@ -35,7 +35,6 @@ from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
 from adafruit_ble.services.nordic import UARTService
 
 from adafruit_bluefruit_connect.packet import Packet
-from adafruit_bluefruit_connect.button_packet import ButtonPacket
 
 import adafruit_rfm9x
 
@@ -58,7 +57,7 @@ RADIO_FREQ_MHZ = 868.0
 MAX_TX_POWER = 23
 
 NO_COLLAR = -1              # ID to return if no collar is found
-COLLAR_TIME_OUT = 10        # how long to wait before giving up on a collar
+COLLAR_TIME_OUT = 120       # how long to wait before giving up on a collar
 
 """
 Initialise the bluetooth device
@@ -137,10 +136,13 @@ def send_wakeup():
     # Look for a new packet - wait up to 5 seconds:
     packet = rfm9x.receive(timeout=5.0)
     if packet is not None:
-        txtpacket = packet.decode()
-        txtpacket = txtpacket.split(",")
-        if txtpacket[1]=="AWAKE":
-            collar_id = int(txtpacket[0])
+        try:
+            txtpacket = packet.decode()
+            txtpacket = txtpacket.split(",")
+            if txtpacket[1]=="AWAKE":
+                collar_id = int(txtpacket[0])
+        except:
+            pass
     return collar_id
 
 
@@ -164,29 +166,33 @@ Forward all messages received from the tag to the connected bluetooth device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 def forward_mode(collar_id):
-    screen_write("Connected to\ncollar id:\n" + str(collar_id) + ". Press and hold A\nto disconnect")
+    screen_write("Collar " + str(collar_id) + " connected\nHold A to send sleep")
 
     timeout_count = 0
     while ble.connected:
-        timeout_count+=1
-        packet = rfm9x.receive(timeout=1.0)
+        timeout_count+=1                                # increase the counter
+        packet = rfm9x.receive(timeout=1.0)             # check if there's a message
         if packet is not None:
+            timeout_count = 0                           # reset the time since last msg count
             rfm9x.send(bytes(ACK, "UTF-8"))             # acknowledge receipt of message
             try:
                 txtpacket = packet.decode("UTF-8")
                 print(txtpacket)
-                if txtpacket.startswith('GPS'):
+                if txtpacket.startswith('GPS'):         # this is a GPS message so we break down and send
                     txtpacket = txtpacket.split(",")
                     try:
-                        uart.write(bytes('LAT,'+txtpacket[1], "UTF-8"))
-                        uart.write(bytes('LON,'+txtpacket[2], "UTF-8"))
+                        if float(txtpacket[1])==float(txtpacket[2]):
+                            uart.write(bytes('LAT,'+txtpacket[1], "UTF-8"))
+                        if float(txtpacket[3])==float(txtpacket[4]):
+                            uart.write(bytes('LON,'+txtpacket[3], "UTF-8"))
                     except:
                         # any errors with the bluetooth we'll exit and try and reconnect
                         break
 
-                else:
+                else:                                   # not a GPS msg so we forward the raw text
                     uart.write(bytes(txtpacket, "UTF-8"))
             except:
+                # any errors in the decoding we'll just continue
                 pass
         if DEBUG: 
             continue                                    # in debug mode we will keep listening
