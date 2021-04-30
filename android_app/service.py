@@ -2,7 +2,7 @@ from oscpy.server import OSCThreadServer
 from time import sleep
 from oscpy.client import OSCClient
 import change_gps
-#import bt_relay
+import nmea_parser
 import asyncio
 from jnius import autoclass
 
@@ -19,11 +19,10 @@ class serviceRunner():
 
         self.client = OSCClient(b'localhost', 3001)
         self.gps = change_gps.changeGPS()
+        self.parser = nmea_parser.parseNMEA()
         self.offset_test=0.0
         
 
-        self.lat = None
-        self.lon = None
 
     def gps_button_callback(self,values):
         self.spoofGPS = values
@@ -34,20 +33,24 @@ class serviceRunner():
 
 
     def ble_msg(self,values):
+        self.send_msg('BLE msg: ' + values.decode()) 
         try:
-            msgtxt = values.decode("UTF-8")
-            msgtxt = msgtxt.split(',')
-            if msgtxt[0]=="LAT":
-                self.lat = float(msgtxt[1])
-                if DEBUG:
-                    self.send_msg('Received latitude value: ' + msgtxt[1]) 
-            elif msgtxt[0]=="LON":
-                self.lon = float(msgtxt[1])
-                if DEBUG:
-                    self.send_msg('Received longitude value: ' + msgtxt[1]) 
-
-            else:
-                self.send_msg('BLE msg: ' + values.decode()) 
+            ss = self.parser.parse_msg(values)
+            if ss=="SUCCESS":
+                self.send_msg((str(self.parser.latitude) + ' ' + str(self.parser.longitude)))
+            self.send_msg('Parser: ' + ss) 
+            #msgtxt = values.decode("UTF-8")
+            #msgtxt = msgtxt.split(',')
+            #if msgtxt[0]=="LAT":
+            #    self.lat = float(msgtxt[1])
+            #    if DEBUG:
+            #        self.send_msg('Received latitude value: ' + msgtxt[1]) 
+            #elif msgtxt[0]=="LON":
+            #    self.lon = float(msgtxt[1])
+            #    if DEBUG:
+            #        self.send_msg('Received longitude value: ' + msgtxt[1]) 
+            #
+            #else:
         except:
             pass
 
@@ -59,9 +62,10 @@ class serviceRunner():
 
                 #self.gps.update_locale(lat,lon)
 
-                if self.lat is not None and self.lon is not None:
+                if self.parser.has_fix:
                     try: 
-                        self.gps.update_locale(self.lat,self.lon)
+                        print('spoof')#self.gps.update_locale(self.parser.lat,self.parser.lon, self.parser.alt, self.parser.acc)
+                        self.gps.update_locale(self.parser.latitude,self.parser.longitude, self.parser.alt, self.parser.acc)
                     except:
                         pass
 

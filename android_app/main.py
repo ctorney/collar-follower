@@ -127,8 +127,6 @@ class collarFollower(App):
 
     def gps_switch_callback(self, switchObject, switchValue):
 
-        print('Value of gps settings is:', switchValue)
-        print('Value of ble.connected is:', self.ble.connected)
         if self.ble.connected:
             self.client.send_message(b'/gpsbutton', [switchValue])
         elif switchValue:

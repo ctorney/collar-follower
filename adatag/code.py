@@ -10,6 +10,7 @@ import board
 import busio
 
 from time import sleep
+
 import adafruit_gps
 # SPDX-FileCopyrightText: 2021 ladyada for Adafruit Industries
 # SPDX-License-Identifier: MIT
@@ -68,13 +69,15 @@ gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
 #   https://cdn-shop.adafruit.com/datasheets/PMTK_A11.pdf
 
 # Turn on the basic GGA and RMC info (what you typically want)
-gps.send_command(b"PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
+gps.send_command(b"PMTK314,0,1,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0")
+
+#gps.send_command(b"PMTK314,1,1,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0")
 # Turn on just minimum info (RMC only, location):
 # gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
 # Turn off everything:
 # gps.send_command(b'PMTK314,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
 # Turn on everything (not all of it is parsed!)
-# gps.send_command(b'PMTK314,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0')
+#gps.send_command(b'PMTK314,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0')
 
 # Set update rate to once a second (1hz) which is what you typically want.
 gps.send_command(b"PMTK220,1000")
@@ -92,12 +95,21 @@ while True:
     # as fast as data comes from the GPS unit (usually every second).
     # This returns a bool that's true if it parsed new data (you can ignore it
     # though if you don't care and instead look at the has_fix property).
+    sentence = gps._read_sentence()
+    if sentence is None:
+        continue
+    print(sentence)
+    rfm9x.send(bytes(sentence + '\n', "utf-8"))
+    sleep(0.1)
+    continue
     gps.update()
+    #sleep(0.5)
+    #print(gps.nmea_sentence)
+    #continue
     # Every second print out current location details if there's a fix.
     current = time.monotonic()
     if current - last_print >= 1.0:
         last_print = current
-        #print(gps.nmea_sentence)
         #rfm9x.send(bytes(gps.nmea_sentence, "utf-8"))
         #sleep(0.5)
         if not gps.has_fix:
@@ -105,19 +117,32 @@ while True:
             print("Waiting for fix...")
             rfm9x.send(bytes("Waiting for fix...", "utf-8"))
             continue
-        print("Sending fix...")
-        msgstring = 'FLOATGPS,'
-        msgstring = msgstring + "{0:.6f},".format(gps.latitude)
-        msgstring = msgstring + "{0:.6f},".format(gps.longitude)
-        msgstring = msgstring + "{0:.6f}\r\n".format(gps.fix_quality)
-        print(msgstring)
-        rfm9x.send(bytes(msgstring, "utf-8"))
+        #print("Sending fix...")
+        timestamp = (
+            "{}/{}/{} {:02}:{:02}:{:02}".format(
+                gps.timestamp_utc.tm_mon,  # Grab parts of the time from the
+                gps.timestamp_utc.tm_mday,  # struct_time object that holds
+                gps.timestamp_utc.tm_year,  # the fix time.  Note you might
+                gps.timestamp_utc.tm_hour,  # not get all data like year, day,
+                gps.timestamp_utc.tm_min,  # month!
+                gps.timestamp_utc.tm_sec,
+            )
+        )
+        #msgstring = 'FLOATGPS,'
+        #msgstring = msgstring + timestamp + ","
+        #msgstring = msgstring + "{0:.6f},".format(gps.latitude)
+        #msgstring = msgstring + "{0:.6f},".format(gps.longitude)
+        #msgstring = msgstring + "{0:.6f}\n".format(gps.fix_quality)
+        #print(msgstring)
+        #rfm9x.send(bytes(msgstring, "utf-8"))
+        #sleep(0.5)
         msgstring = 'GPS,'
+        msgstring = msgstring + timestamp + ","
         msgstring = msgstring + gps.latitude_as_string + ','
         msgstring = msgstring + gps.latitude_as_string + ','        # send twice for checking
         msgstring = msgstring + gps.longitude_as_string + ','
         msgstring = msgstring + gps.longitude_as_string + ','       # send twice for checking
-        msgstring = msgstring + "{0:.6f}\r\n".format(gps.fix_quality)
-        print(msgstring)
+        msgstring = msgstring + "{0:.6f}\n".format(gps.fix_quality)
+        #print(msgstring)
         rfm9x.send(bytes(msgstring, "utf-8"))
 

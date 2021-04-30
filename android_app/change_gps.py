@@ -32,15 +32,15 @@ class changeGPS():
         self.lm.setTestProviderEnabled(self.providerName, True)
 
 
-    def update_locale(self, lat,lon):
+    def update_locale(self, lat,lon, alt, acc):
         mockLocation = Location(self.providerName)
         mockLocation.setLatitude(lat)
         mockLocation.setLongitude(lon)
-        mockLocation.setAltitude(3.)
+        mockLocation.setAltitude(alt)
         mockLocation.setTime(System.currentTimeMillis())
         mockLocation.setSpeed(0.0)
         mockLocation.setBearing(1)
-        mockLocation.setAccuracy(3.)
+        mockLocation.setAccuracy(acc)
         mockLocation.setBearingAccuracyDegrees(0.1)
         mockLocation.setVerticalAccuracyMeters(0.1)
         mockLocation.setSpeedAccuracyMetersPerSecond(0.01)
