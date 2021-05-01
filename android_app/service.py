@@ -2,7 +2,7 @@ from oscpy.server import OSCThreadServer
 from time import sleep
 from oscpy.client import OSCClient
 import change_gps
-import nmea_parser
+import pynmea2
 import asyncio
 from jnius import autoclass
 
@@ -19,8 +19,11 @@ class serviceRunner():
 
         self.client = OSCClient(b'localhost', 3001)
         self.gps = change_gps.changeGPS()
-        self.parser = nmea_parser.parseNMEA()
+
         self.first_fix=False
+        self.latitude = None
+        self.longitude = None
+        self.has_fix = False
         
 
 
@@ -31,11 +34,33 @@ class serviceRunner():
         else:
             self.send_msg('GPS spoofing stopped') 
 
+    def parse_msg(self,msg):
+        try:
+            msgtxt = msg.decode("UTF-8")
+            sentence = msgtxt.strip().strip('\n')
+            parsed = pynmea2.parse(sentence)
+        except:
+            return False
+
+
+        try:
+            if parsed.sentence_type == "RMC":  # Minimum location info
+                if parsed.status=='A':   # Status Valid(A) or Invalid(V)
+                    self.has_fix = True
+                    # Latitude
+                    self.latitude = parsed.latitude 
+                    # Longitude
+                    self.longitude = parsed.longitude 
+        except:
+            return False
+
+        
+        return True
 
     def ble_msg(self,values):
         try:
-            ss = self.parser.parse_msg(values)
-            if self.parser.has_fix:
+            ss = self.parse_msg(values)
+            if self.has_fix:
                 if not self.first_fix:
                     self.first_fix = True
                     self.send_msg('Tag has GPS fix') 
@@ -44,13 +69,11 @@ class serviceRunner():
 
     def run(self):
         while True:
-            if self.spoofGPS:
-
-                if self.parser.has_fix:
-                    try: 
-                        self.gps.update_locale(self.parser.latitude,self.parser.longitude, self.parser.alt, self.parser.acc)
-                    except:
-                        pass
+            if self.spoofGPS and self.has_fix:
+                try: 
+                    self.gps.update_locale(self.latitude,self.longitude)
+                except:
+                    pass
 
             sleep(.1)
 
@@ -59,10 +82,7 @@ class serviceRunner():
 
 
 if __name__ == '__main__':
-
-
     service = serviceRunner()
-
     service.run()
 
 
