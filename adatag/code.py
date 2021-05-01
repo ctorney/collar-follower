@@ -69,11 +69,11 @@ gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
 #   https://cdn-shop.adafruit.com/datasheets/PMTK_A11.pdf
 
 # Turn on the basic GGA and RMC info (what you typically want)
-gps.send_command(b"PMTK314,0,1,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0")
+#gps.send_command(b"PMTK314,0,1,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0")
 
 #gps.send_command(b"PMTK314,1,1,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0")
 # Turn on just minimum info (RMC only, location):
-# gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
+gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
 # Turn off everything:
 # gps.send_command(b'PMTK314,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
 # Turn on everything (not all of it is parsed!)
@@ -98,9 +98,9 @@ while True:
     sentence = gps._read_sentence()
     if sentence is None:
         continue
-    print(sentence)
+    #print(sentence)
     rfm9x.send(bytes(sentence + '\n', "utf-8"))
-    sleep(0.1)
+    #sleep(0.1)
     continue
     gps.update()
     #sleep(0.5)

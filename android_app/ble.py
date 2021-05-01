@@ -62,9 +62,6 @@ class BLE(BluetoothDispatcher):
         self.enable_notifications(self.tx_characteristic)   # listen for any message transmitted
         self.request_mtu(255)
 
-    #def on_mtu_changed(self, mtu, status):
-    #    if status == GATT_SUCCESS and mtu == 103:
-    #        print("MTU changed: now it is possible to send 100 bytes at once")
 
     def on_characteristic_changed(self, characteristic):
         # message received so forward to the GPS service
@@ -73,21 +70,11 @@ class BLE(BluetoothDispatcher):
             valuestring = bytes(value).decode()
             self.message = self.message + valuestring
             if '\n' in valuestring:
-                #print(self.message)
                 self.gps_client.send_message(b'/blemsg', [bytes(self.message.encode("UTF-8"))])
                 print(self.message)
                 self.message = ''
         except:
             pass
-            #value2 = characteristic.getValue()
-        #print('bytes array', value)
-        #print(bytes(value).hex())
-        #print(bytes(value))# + bytes(value2).decode())
-        #print(bytes(value[1]).decode())
-
-    #def on_characteristic_read(self, characteristic, status):
-    #    if status == GATT_SUCCESS:
-    #        print('done writing') 
 
     def send_app_msg(self, text):
         # send log messages back to the main app

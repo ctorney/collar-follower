@@ -20,7 +20,7 @@ class serviceRunner():
         self.client = OSCClient(b'localhost', 3001)
         self.gps = change_gps.changeGPS()
         self.parser = nmea_parser.parseNMEA()
-        self.offset_test=0.0
+        self.first_fix=False
         
 
 
@@ -33,38 +33,21 @@ class serviceRunner():
 
 
     def ble_msg(self,values):
-        self.send_msg('BLE msg: ' + values.decode()) 
         try:
             ss = self.parser.parse_msg(values)
-            if ss=="SUCCESS":
-                self.send_msg((str(self.parser.latitude) + ' ' + str(self.parser.longitude)))
-            self.send_msg('Parser: ' + ss) 
-            #msgtxt = values.decode("UTF-8")
-            #msgtxt = msgtxt.split(',')
-            #if msgtxt[0]=="LAT":
-            #    self.lat = float(msgtxt[1])
-            #    if DEBUG:
-            #        self.send_msg('Received latitude value: ' + msgtxt[1]) 
-            #elif msgtxt[0]=="LON":
-            #    self.lon = float(msgtxt[1])
-            #    if DEBUG:
-            #        self.send_msg('Received longitude value: ' + msgtxt[1]) 
-            #
-            #else:
+            if self.parser.has_fix:
+                if not self.first_fix:
+                    self.first_fix = True
+                    self.send_msg('Tag has GPS fix') 
         except:
             pass
 
     def run(self):
         while True:
             if self.spoofGPS:
-                #lat = -2.332577
-                #lon = 34.832153
-
-                #self.gps.update_locale(lat,lon)
 
                 if self.parser.has_fix:
                     try: 
-                        print('spoof')#self.gps.update_locale(self.parser.lat,self.parser.lon, self.parser.alt, self.parser.acc)
                         self.gps.update_locale(self.parser.latitude,self.parser.longitude, self.parser.alt, self.parser.acc)
                     except:
                         pass
@@ -72,7 +55,7 @@ class serviceRunner():
             sleep(.1)
 
     def send_msg(self, text):
-        self.client.send_message(b'/msg', [text.encode()])#, ip_address=b'localhost', port=3000) 
+        self.client.send_message(b'/msg', [text.encode()])
 
 
 if __name__ == '__main__':
