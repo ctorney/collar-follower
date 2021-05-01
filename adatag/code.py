@@ -91,58 +91,10 @@ gps.send_command(b"PMTK220,1000")
 # Main loop runs forever printing the location, etc. every second.
 last_print = time.monotonic()
 while True:
-    # Make sure to call gps.update() every loop iteration and at least twice
-    # as fast as data comes from the GPS unit (usually every second).
-    # This returns a bool that's true if it parsed new data (you can ignore it
-    # though if you don't care and instead look at the has_fix property).
     sentence = gps._read_sentence()
     if sentence is None:
         continue
     #print(sentence)
     rfm9x.send(bytes(sentence + '\n', "utf-8"))
     #sleep(0.1)
-    continue
-    gps.update()
-    #sleep(0.5)
-    #print(gps.nmea_sentence)
-    #continue
-    # Every second print out current location details if there's a fix.
-    current = time.monotonic()
-    if current - last_print >= 1.0:
-        last_print = current
-        #rfm9x.send(bytes(gps.nmea_sentence, "utf-8"))
-        #sleep(0.5)
-        if not gps.has_fix:
-            # Try again if we don't have a fix yet.
-            print("Waiting for fix...")
-            rfm9x.send(bytes("Waiting for fix...", "utf-8"))
-            continue
-        #print("Sending fix...")
-        timestamp = (
-            "{}/{}/{} {:02}:{:02}:{:02}".format(
-                gps.timestamp_utc.tm_mon,  # Grab parts of the time from the
-                gps.timestamp_utc.tm_mday,  # struct_time object that holds
-                gps.timestamp_utc.tm_year,  # the fix time.  Note you might
-                gps.timestamp_utc.tm_hour,  # not get all data like year, day,
-                gps.timestamp_utc.tm_min,  # month!
-                gps.timestamp_utc.tm_sec,
-            )
-        )
-        #msgstring = 'FLOATGPS,'
-        #msgstring = msgstring + timestamp + ","
-        #msgstring = msgstring + "{0:.6f},".format(gps.latitude)
-        #msgstring = msgstring + "{0:.6f},".format(gps.longitude)
-        #msgstring = msgstring + "{0:.6f}\n".format(gps.fix_quality)
-        #print(msgstring)
-        #rfm9x.send(bytes(msgstring, "utf-8"))
-        #sleep(0.5)
-        msgstring = 'GPS,'
-        msgstring = msgstring + timestamp + ","
-        msgstring = msgstring + gps.latitude_as_string + ','
-        msgstring = msgstring + gps.latitude_as_string + ','        # send twice for checking
-        msgstring = msgstring + gps.longitude_as_string + ','
-        msgstring = msgstring + gps.longitude_as_string + ','       # send twice for checking
-        msgstring = msgstring + "{0:.6f}\n".format(gps.fix_quality)
-        #print(msgstring)
-        rfm9x.send(bytes(msgstring, "utf-8"))
 

@@ -177,26 +177,13 @@ def forward_mode(collar_id):
             timeout_count = 0                           # reset the time since last msg count
             rfm9x.send(bytes(ACK, "UTF-8"))             # acknowledge receipt of message
             uart.write(packet)
-            try:
-                txtpacket = packet.decode("UTF-8")
-                print(txtpacket)
-                #if txtpacket.startswith('GPS'):         # this is a GPS message so we break down and send
-                #    txtpacket = txtpacket.split(",")
-                #    try:
-                #        uart.write(bytes('Fix at: '+txtpacket[1], "UTF-8"))
-                #        if float(txtpacket[2])==float(txtpacket[3]):
-                #            uart.write(bytes('LAT,'+txtpacket[2], "UTF-8"))
-                #        if float(txtpacket[4])==float(txtpacket[5]):
-                #            uart.write(bytes('LON,'+txtpacket[4], "UTF-8"))
-                #    except:
-                #        # any errors with the bluetooth we'll exit and try and reconnect
-                #        break
-
-                #else:                                   # not a GPS msg so we forward the raw text
-                #    uart.write(bytes(txtpacket, "UTF-8"))
-            except:
-                # any errors in the decoding we'll just continue
-                pass
+            if DEBUG:
+                try:
+                    txtpacket = packet.decode("UTF-8")
+                    print(txtpacket)
+                except:
+                    # any errors in the decoding we'll just continue
+                    pass
         if DEBUG: 
             continue                                    # in debug mode we will keep listening
         if timeout_count>COLLAR_TIME_OUT:
