@@ -1,14 +1,10 @@
-from kivy.lang import Builder
-from kivy.app import App
-from kivy.properties import StringProperty
-from kivy.clock import mainthread
-from kivy.utils import platform
 
 
 from plyer.facades import GPS
 from plyer.platforms.android import activity
 from jnius import autoclass, java_method, PythonJavaClass
 
+import time
 Looper = autoclass('android.os.Looper')
 SystemClock = autoclass('android.os.SystemClock')
 LocationManager = autoclass('android.location.LocationManager')
@@ -16,9 +12,11 @@ Location = autoclass('android.location.Location')
 Context = autoclass('android.content.Context')
 System = autoclass('java.lang.System')
 
+
+# GPS spoofer with alpha-beta filter
 class changeGPS():
 
-    def __init__(self):
+    def __init__(self, alpha=0.95, beta=0.95):
 
         self.lm = activity.getSystemService(Context.LOCATION_SERVICE)
 
@@ -32,7 +30,64 @@ class changeGPS():
         self.lm.setTestProviderEnabled(self.providerName, True)
 
 
-    def update_locale(self, lat,lon):
+        # alpha-beta filter
+        self.alpha = alpha
+        self.beta = beta
+
+        self.last_lat = None
+        self.last_lon = None
+
+        self.update_time = None
+
+        self.speed_lat = 0.0
+        self.speed_lon = 0.0
+
+    
+    def add_location(self, lat, lon):
+
+
+        time_now = time.monotonic()
+
+        if self.update_time is None:
+            # first update
+            self.update_time = time_now
+            self.last_lat = lat
+            self.last_lon = lon
+            return
+
+        pred_lat, pred_lon = self.predict(time_now)
+        
+        delta_t = time_now - self.update_time
+
+        error_lat = lat - pred_lat
+        error_lon = lon - pred_lon
+
+        self.last_lat = pred_lat + self.alpha * error_lat
+        self.last_lon = pred_lon + self.alpha * error_lon
+      
+        self.speed_lat = self.speed_lat + (self.beta / delta_t) * error_lat
+        self.speed_lon = self.speed_lon + (self.beta / delta_t) * error_lon
+
+        self.update_time = time_now
+        return 
+
+    def predict(self, t=None):
+
+        if t is None:
+            t = time.monotonic()
+
+        delta_t = t - self.update_time
+        pred_lat = self.last_lat + (delta_t * self.speed_lat)
+        pred_lon = self.last_lon + (delta_t * self.speed_lon)
+
+        return pred_lat, pred_lon
+
+
+
+    def update_locale(self):
+
+        lat, lon = self.predict()
+           
         mockLocation = Location(self.providerName)
         mockLocation.setLatitude(lat)
         mockLocation.setLongitude(lon)
@@ -47,3 +102,4 @@ class changeGPS():
         mockLocation.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos())
         self.lm.setTestProviderLocation(self.providerName, mockLocation)
 
+        return
