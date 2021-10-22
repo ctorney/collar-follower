@@ -2,7 +2,6 @@
 # print on screen for 2 minutes
 # send stop message
 
-
 # cyrus , colin, grant 2021
 
 import board
@@ -112,8 +111,8 @@ rfm9x = ulora.LoRa(spi, CS, modem_config=ulora.ModemConfig.Bw125Cr45Sf2048,tx_po
 Send wake up message to gps tag
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-wake_msg = "GPS wake up"
-stop_msg = "GpS stop"
+#wake_msg = "GPS wake up"
+#Stop_msg = "GPS stop"
 
 
 # Set to max transmit power!
@@ -124,9 +123,16 @@ stop_msg = "GpS stop"
 
 #print(rfm9x.bw_bins)
 
-# send wake up message
+# receive collar_ID
+packet= rfm9x.receive()
+if packet is not None:
+    print(packet)
+    screen_write("Received".format(packet))
+    print(packet)
 
-packet = rfm9x.send(bytes("GPS wake up", "utf-8"),1)
+# send wake up message
+packet = rfm9x.send(bytes("Wake", "utf-8"),1)
+#packet = rfm9x.send(bytes("GPS wake up", "utf-8"),1)
 print(packet)
 
 screen_write("start GPS message send")
@@ -168,3 +174,5 @@ while True:
         screen_write('no message')
 
     sleep(0.01)
+
+
