@@ -33,43 +33,53 @@ uart = busio.UART(board.TX, board.RX, baudrate=9600, timeout=10)
 # Create a GPS module instance.
 gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
 
-#name the collar ID
+
 collar_ID = "the collar_ID is WB100"
-packet = rfm9x.send(bytes(collar_ID + '\n', "utf-8"))  # send via radio
-print(packet)
-print("collar_id send")
 
-# receive wake up message
-packet = rfm9x.receive()
-print(packet)
-# sleep(3)
-if packet is not None:
-    try:
-        txtpacket = packet.decode()
-        textpacket = txtpacket.split(",")
-        if txtpacket[1]== Wake:
-            message = "broadcast mode intiated"
-            packet = rfm9x.send(bytes(message, "utf-8"))  # send via radio
-            print(packet)
-            # Turn on just minimum info (RMC only, location):
-            gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
-            # Set update rate to once a second (1hz) which is what you typically want.
-            gps.send_command(b"PMTK220,5000")
+#name the collar ID
+while True:
+    packet = rfm9x.send(bytes(collar_ID + '\n', "utf-8"))  # send via radio
+    print("collar_id send")
+    time.sleep(2)
 
-            # ~~~~~Main loop runs forever printing the location, etc. every second.
-            last_print = time.monotonic()
-            while True:
-                sentence = gps._read_sentence()
-                if sentence is None:
-                    continue
-                print(sentence)
-                rfm9x.send(bytes(sentence + '\n', "utf-8"))
-                # sleep(0.1)
-        elif packet == "GPS stop":
-            print("GPS has stopped")
-            gps.send_command(b"PMTK161,0") # GPS enters into low power mode
-            packet = rfm9x.send(bytes("GPS low power mode initiated", "utf-8"))
-            print("GPS low power mode initiated")
-    except:
-        pass
+    # receive wake up message
+    packet =rfm9x.receive()
+    if packet is not None:
+        print(packet) # print received packet
+
+    if packet is not None:
+        try:
+            txtpacket = packet.decode()
+            textpacket = txtpacket.split(",")
+            if txtpacket [0] == "BASE,PING":
+                message = "broadcast mode intiated"
+                packet = rfm9x.send(bytes(message + '\n', "utf-8"))  # send via radio
+                print(packet)
+                # Turn on just minimum info (RMC only, location):
+                gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
+                # Set update rate to once a second (1hz) which is what you typically want.
+                gps.send_command(b"PMTK220,1000")
+
+                # ~~~~~Main loop runs forever printing the location, etc. every second.
+                last_print = time.monotonic()
+                while True:
+                    sentence = gps._read_sentence()
+                    if sentence is None:
+                        continue
+                    print(sentence)
+                    #rfm9x.send(bytes(sentence + '\n', "utf-8"))
+                    # sleep(0.1)
+            elif packet == GPSSTOP:
+                print("GPS has stopped")
+                gps.send_command(b"PMTK161,0") # GPS enters into low power mode
+                packet = rfm9x.send(bytes("GPS low power mode initiated", "utf-8"))
+                print("GPS low power mode initiated")
+        except:
+            pass
+
+
+
+
+
+
 
