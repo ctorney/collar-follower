@@ -1,5 +1,5 @@
 # receive and print on screen
-# cyrus , colin, grant 21 oct 2021
+# cyrus , colin, grant 21 Oct 2021
 
 import board
 import busio
@@ -93,14 +93,14 @@ rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ, agc=True)
 
 while True:
     print("waiting for message...")
-    screen_write("waiting for message...")
+    # screen_write("waiting for message...")
     packet = rfm9x.receive(timeout=20.0)
     # If no packet was received during the timeout then None is returned.
     if packet is not None:
         # Received a packet!
         #Print out the raw bytes of the packet:
-        print("Received (ASCII):\n {0}".format(packet))
-        #screen_write("Received (ascii): {0}".format(packet))
+        # print("Received (ASCII):\n {0}".format(packet))
+        # screen_write("Received (ascii): {0}".format(packet))
         # And decode to ASCII text and print it too.  Note that you always
         # receive raw bytes and need to convert to a text format like ASCII
         # if you intend to do string processing on your data.  Make sure the
@@ -108,7 +108,15 @@ while True:
         try:
             packet_text = str(packet, "ascii")
             print("Received (ASCII):\n {0}".format(packet_text))
-            screen_write("Received (ASCII): {0}".format(packet_text))
+            #screen_write("Received (ASCII): {0}".format(packet_text))
+
+            # txt = "message 1,message 2,message 3"
+            x = packet_text.split(",")
+            print(x[2])
+            if x[2] == "A":
+                screen_write(x[3]+x[4] + "\n"+ x[5]+x[6])
+                
+
         except:
             print("Message garbled")
             screen_write("Message garbled")
@@ -116,10 +124,10 @@ while True:
         # print it.
         rssi = rfm9x.last_rssi
         print("Received signal \nstrength:\n {0} dB".format(rssi))
-        screen_write("Received signal strength: {0} dB".format(rssi))
+        # screen_write("Received signal strength: {0} dB".format(rssi))
         rfm9x.send(bytes("And hello back to you\n", "utf-8"))
     else:
         print('no message')
         screen_write('no message')
-        
+
     sleep(0.01)
