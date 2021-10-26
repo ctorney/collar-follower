@@ -37,9 +37,10 @@ BORDER = 2
 screen_refresh = 30         # time interval (s) for rewriting screen (mainly for RSSI)
 
 # RADIO MESSAGES
-WAKE = "BASE,PING"          # wake-up message constantly sent
-SLEEP = "BASE,GOTOSLEEP,"   # sleep message, sent on button press to deactivate the tag
-ACK = "BASE,ACK"            # acknowledge receipt of message and tell tag to proceed
+# WAKE = "BASE,PING"          # wake-up message constantly sent
+# SLEEP = "BASE,GOTOSLEEP,"   # sleep message, sent on button press to deactivate the tag
+# ACK = "BASE,ACK"            # acknowledge receipt of message and tell tag to proceed
+# GPSSTOP = "GPS_STOP"        # Send gps stop message
 
 # RADIO
 RADIO_FREQ_MHZ = 869.45
@@ -111,8 +112,8 @@ rfm9x = ulora.LoRa(spi, CS, modem_config=ulora.ModemConfig.Bw125Cr45Sf2048,tx_po
 Send wake up message to gps tag
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-#wake_msg = "GPS wake up"
-#Stop_msg = "GPS stop"
+#WAKE = "BASE,PING"
+#GPSSTOP = "GPS, STOP"
 
 
 # Set to max transmit power!
@@ -121,36 +122,31 @@ Send wake up message to gps tag
 #rfm9x.signal_bandwidth = 250000#a62500
 #rfm9x.coding_rate = 5
 
-#print(rfm9x.bw_bins)
-
 # receive collar_ID
-packet= rfm9x.receive()
-if packet is not None:
-    print(packet)
-    screen_write("Received".format(packet))
-    print(packet)
-
-# send wake up message
-packet = rfm9x.send(bytes("Wake", "utf-8"),1)
-#packet = rfm9x.send(bytes("GPS wake up", "utf-8"),1)
-print(packet)
-
-screen_write("start GPS message send")
-print("start GPS message send...")
-time.sleep(3) # wait for two minutes
-
-packet = rfm9x.receive()
-print(packet)
-
-
 while True:
+    packet = rfm9x.receive()
+    if packet is not None:
+        print(packet)
+        screen_write("Received".format(packet))
+
+    # while True:
+    # send wake up message
+    packet = rfm9x.send(bytes("BASE,PING" + '\n', "utf-8"),1)
+    print(packet)
+    screen_write("start GPS message send")
+    print("start GPS message send...")
+
+    #if packet is not None:
+    print(packet)
+    # print(packet)
+    # while True:
     print("waiting for message...")
     screen_write("waiting for message...")
-    packet = rfm9x.receive(timeout=20.0)
+    # packet = rfm9x.receive(timeout=1.0)
     # If no packet was received during the timeout then None is returned.
     if packet is not None:
         # Received a packet!
-        # Print out the raw bytes of the packet:
+        #Print out the raw bytes of the packet:
         print("Received (raw bytes): {0}".format(packet))
         # And decode to ASCII text and print it too.  Note that you always
         # receive raw bytes and need to convert to a text format like ASCII
@@ -163,8 +159,8 @@ while True:
         except:
             print("Message garbled")
             screen_write("Message garbled")
-        # Also read the RSSI (signal strength) of the last received message and
-        # print it.
+            # Also read the RSSI (signal strength) of the last received message and
+            # print it.
         rssi = rfm9x.last_rssi
         print("Received signal \nstrength:\n {0} dB".format(rssi))
         screen_write("Received signal strength: {0} dB".format(rssi))
@@ -172,7 +168,7 @@ while True:
     else:
         print('no message')
         screen_write('no message')
+    sleep(0.0)
 
-    sleep(0.01)
 
 
