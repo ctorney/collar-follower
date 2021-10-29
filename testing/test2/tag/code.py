@@ -1,6 +1,7 @@
 # receive message to start and then start sending GPS, until receive stop message
 
 # Author: Cyrus, Colin, Grant
+# Date: 21 Oct 2021
 # Simple GPS module demonstration.
 # Will wait for a fix and print a message every second with the current location
 # and other details.
@@ -75,9 +76,9 @@ while True:
                     continue
                 ns = sentence.split(",")
                 if ns[2] == "A":
-                    ns=(ns[3]+ns[4] + "\n"+ ns[5]+ns[6])
-                    print(ns)
-                    rfm9x.send(bytes(ns + '\n', "utf-8"))
+                    gps_stc=(ns[3]+ns[4] + "\n"+ ns[5]+ns[6])
+                    print(gps_stc)
+                    rfm9x.send(bytes(gps_stc + '\n', "utf-8"))
         #sleep(0.1)
 
 
