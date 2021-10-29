@@ -3,7 +3,6 @@
 # send stop message
 
 # cyrus , colin, grant 21 oct 2021
-
 import board
 import busio
 import displayio
@@ -94,12 +93,12 @@ rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ, agc=True)
 # Set to max transmit power!
 while True:
     print("waiting for message...")
-    # screen_write("waiting for message...")
+    #screen_write("waiting for message...")
     packet = rfm9x.receive(timeout=5.0)
     if packet is not None:
         packet = str(packet, "ascii")
         print("Received (ASCII):\n {0}".format(packet))
-        screen_write(packet)# this is showing fixes on screen
+        # screen_write(packet)# this is showing fixes on screen
 
         #~~send gps start message
         packet = rfm9x.send(bytes(str("AAA"), "utf-8"))
@@ -108,7 +107,7 @@ while True:
         #~~~ Broadcast sms received
 
         # If no packet was received during the timeout then None is returned.
-        # packet = rfm9x.receive(timeout=1.0)
+        packet = rfm9x.receive(timeout=1.0)
         if packet is not None:
             # Received a packet!
             #Print out the raw bytes of the packet:
@@ -121,11 +120,9 @@ while True:
             try:
                 packet_text = str(packet, "ascii")
                 print("Received (ASCII):\n {0}".format(packet_text))
-                # screen_write("Received (ASCII): {0}".format(packet_text))
-                x = packet_text.split(",")
-                print(x[2])
-                if x[2] == "A":
-                    screen_write(x[3]+x[4] + "\n"+ x[5]+x[6])
+                #screen_write("Received (ASCII): {0}".format(packet_text))
+                screen_write(packet_text)
+                
             except:
                 print("Message garbled")
                 #screen_write("Message garbled")
@@ -135,9 +132,11 @@ while True:
             print("Received signal \nstrength:\n {0} dB".format(rssi))
             sigal_strength=("Received signal \nstrength:\n {0} dB".format(rssi))
             # screen_write("Received signal strength: {0} dB".format(rssi))
-            #screen_write(sigal_strength)
+            #screen_write(rssi)
             #rfm9x.send(bytes("And hello back to you\n", "utf-8"))
         else:
             print('no message')
-            screen_write('no message')
+            #screen_write('no message')
                 # sleep(0.01)
+
+ 
