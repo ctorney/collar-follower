@@ -1,16 +1,12 @@
 # receive message to start and then start sending GPS, until receive stop message
-
 # Author: Cyrus, Colin, Grant
-# Date: 21 Oct 2021
-# Simple GPS module demonstration.
+# Date: Oct 2021
 # Will wait for a fix and print a message every second with the current location
 # and other details.
 import time
 import board
 import busio
-
 from time import sleep
-
 import adafruit_gps
 # SPDX-FileCopyrightText: 2021 ladyada for Adafruit Industries
 # SPDX-License-Identifier: MIT
@@ -18,7 +14,6 @@ import adafruit_gps
 import digitalio
 
 import adafruit_rfm9x
-
 # Define radio parameters.
 RADIO_FREQ_MHZ = 869.45  # Frequency of the radio in Mhz. Must match your
 # module! Can be a value like 915.0, 869.45, etc.
@@ -41,13 +36,16 @@ uart = busio.UART(board.TX, board.RX, baudrate=9600, timeout=10)
 # Create a GPS module instance.
 gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
 
+#name the collar ID
+collar_ID = "Collar_ID WB100"
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # sleep funtion
 def sleep_interval():
     time.sleep(10) # sleep duration can be changed
-
-#name the collar ID
-collar_ID = "Collar_ID WB100"
-
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# low power mode funtion
+def low_powermode():
+    gps.send_command(b"PMTK161,0")
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # broadcast function
 def Broadcast_mode():
@@ -72,41 +70,44 @@ def Broadcast_mode():
                 gps_stc=(ns[3]+ns[4] + "\n"+ ns[5]+ns[6])
                 print(gps_stc)
                 rfm9x.send(bytes(gps_stc + '\n', "utf-8"))
-                #l_print = time.monotonic()
-                #if l_print - last_print>120: #2 minutes
-                    # print("break broadcast mode")
-                    # receive a text
-                    # if zzz break
-                    #sleep(10)# sleep for some seconds
-                    # break
-                    # continue
-
+                l_print = time.monotonic()
+                if l_print - last_print > 5: # this duration will be adjusted
+                    print("break broadcast mode")
+                    break
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # standy_mode function
 def standby_mode():
     while True:
+        last_print = time.monotonic()
         packet = rfm9x.send(bytes(collar_ID, "utf-8"))  # send via radio
         print("Hi, collar ID send")
-        # sleep(1.0)
         #~ receive gps start message
-        packet = rfm9x.receive(timeout=1.0)
+        first_print = time.monotonic()
+        packet = rfm9x.receive(timeout=0.5)
         if packet is not None:
+            last_print = time.monotonic()
             packet_text = str(packet, "ascii")
             print("Received (ASCII):\n {0}".format(packet_text))
             # print(packet)
             if packet_text == "AAA":
                 print("GPS intiated")
-                message = "broadcast mode intiated"
+                message = "broadcast mode\ninitiated"
                 packet = rfm9x.send(bytes(message, "utf-8"))  # send via radio
                 Broadcast_mode() # activate broadcast
+            if packet_text == "ZZZ":
+                packet = rfm9x.send(bytes("low power\nmode activated", "utf-8"))
+                low_powermode()
+            if last_print - first_print >60: #if this duration lapses then break ideally should 20 minutes
+                break
 # Main loop
 while True:
-    packet = rfm9x.send(bytes("GPS tag available", "utf-8"))  # tag announces its presence
+    packet = rfm9x.send(bytes("GPS tag WB100\navailable", "utf-8"))  # tag announces its presence
     print("Hi,\nA gps tag is available")
 
-    packet = rfm9x.receive(timeout=2.0)  #check message listen for incoming message for 5 minutes
+    packet = rfm9x.receive(timeout=1.0)  #check message listen for incoming message for 5 minutes
     if packet is not None:
         print("Received (ASCII):\n {0}".format(packet))
-        standby_mode()  # this is a function
+        standby_mode()  
     else:
         sleep_interval()
+        print("has entered sleep interval")
