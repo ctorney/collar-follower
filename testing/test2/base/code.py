@@ -1,8 +1,5 @@
-# send start message
-# print on screen for 2 minutes
-# send stop message
-
 # cyrus , colin, grant 21 oct 2021
+
 import board
 import busio
 import displayio
@@ -89,54 +86,67 @@ RESET = digitalio.DigitalInOut(board.D11)
 # Initialze RFM radio
 rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ, agc=True)
 #rfm9x = ulora.LoRa(spi, CS, modem_config=ulora.ModemConfig.Bw125Cr45Sf2048,tx_power=23) to test and delete
-
 # Set to max transmit power!
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# broadcast presence of base station
+base_announce = "Base station\navailable"
+rfm9x.send(bytes(base_announce, "utf-8"))  # send via radio
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# receive collar id name
+packet = rfm9x.receive(timeout=5.0)
+if packet is not None:
+    packet = str(packet, "ascii")
+    #print(packet)
+    screen_write(packet)
+
 while True:
-    print("waiting for message...")
-    #screen_write("waiting for message...")
-    packet = rfm9x.receive(timeout=5.0)
+    print("waiting for tag message...")
+    # screen_write("waiting for message...")
+    
+    #~~send gps start message
+    rfm9x.send(bytes(str("AAA"), "utf-8"))
+    print("GPS start message send")
+    
+    #~~send gps stop message
+    #rfm9x.send(bytes(str("ZZZ"), "utf-8"))
+    #print("GPS stop message send")
+    
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # If no packet was received during the timeout then None is returned.
+    packet = rfm9x.receive(timeout=1.0)
     if packet is not None:
-        packet = str(packet, "ascii")
-        print("Received (ASCII):\n {0}".format(packet))
-        # screen_write(packet)# this is showing fixes on screen
+        # Received a packet!
+        # Print out the raw bytes of the packet:
+        # print("Received (ASCII):\n {0}".format(packet))
+        # screen_write("Received (ascii): {0}".format(packet))
+        # And decode to ASCII text and print it too.  Note that you always
+        # receive raw bytes and need to convert to a text format like ASCII
+        # if you intend to do string processing on your data.  Make sure the
+        # sending side is sending ASCII data before you try to decode
+        try:
+            packet_text = str(packet, "ascii")
+            #print("Received (ASCII):\n {0}".format(packet_text))
+            #screen_write("Received (ASCII): {0}".format(packet_text))
+            #screen_write(packet_text)
+            ns = packet_text.split(",")
+            if ns[2] == "A" or ns[2] =="V":
+                gps_stc=(ns[2]+"\n"+ns[3]+ns[4] + "\n"+ ns[5]+ns[6])
+                print(gps_stc)
+                screen_write(gps_stc)
 
-        #~~send gps start message
-        packet = rfm9x.send(bytes(str("AAA"), "utf-8"))
-        print("GPS start message send")
-
-        #~~~ Broadcast sms received
-
-        # If no packet was received during the timeout then None is returned.
-        packet = rfm9x.receive(timeout=1.0)
-        if packet is not None:
-            # Received a packet!
-            #Print out the raw bytes of the packet:
-            # print("Received (ASCII):\n {0}".format(packet))
-            # screen_write("Received (ascii): {0}".format(packet))
-            # And decode to ASCII text and print it too.  Note that you always
-            # receive raw bytes and need to convert to a text format like ASCII
-            # if you intend to do string processing on your data.  Make sure the
-            # sending side is sending ASCII data before you try to decode
-            try:
-                packet_text = str(packet, "ascii")
-                print("Received (ASCII):\n {0}".format(packet_text))
-                #screen_write("Received (ASCII): {0}".format(packet_text))
-                screen_write(packet_text)
-                
-            except:
-                print("Message garbled")
-                #screen_write("Message garbled")
-            # Also read the RSSI (signal strength) of the last received message and
-            # print it.
-            rssi = rfm9x.last_rssi
-            print("Received signal \nstrength:\n {0} dB".format(rssi))
-            sigal_strength=("Received signal \nstrength:\n {0} dB".format(rssi))
-            # screen_write("Received signal strength: {0} dB".format(rssi))
-            #screen_write(rssi)
-            #rfm9x.send(bytes("And hello back to you\n", "utf-8"))
-        else:
-            print('no message')
-            #screen_write('no message')
-                # sleep(0.01)
-
- 
+        except:
+            print("Message garbled")
+            screen_write("Message garbled")
+        # Also read the RSSI (signal strength) of the last received message and
+        # print it.
+        rssi = rfm9x.last_rssi
+        print("Received signal \nstrength:\n {0} dB".format(rssi))
+        sigal_strength=("Received signal \nstrength:\n {0} dB".format(rssi))
+        # screen_write("Received signal strength: {0} dB".format(rssi))
+        #screen_write(rssi)
+        #rfm9x.send(bytes("And hello back to you\n", "utf-8"))
+    else:
+        print('no message')
+        screen_write('no message')
+        # sleep(0.01)
