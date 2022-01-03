@@ -37,9 +37,9 @@ from adafruit_ble.services.nordic import UARTService
 
 from adafruit_bluefruit_connect.packet import Packet
 
-import ulora
+import adafruit_rfm9x
 
-DEBUG = 1                   # In debug mode we just listen and forward
+DEBUG = 0                   # In debug mode we just listen and forward
 """
 Constant parameters
 """
@@ -51,17 +51,17 @@ BORDER = 2
 screen_refresh = 30         # time interval (s) for rewriting screen (mainly for RSSI) 
 
 # RADIO MESSAGES
-WAKE = "BASE,PING"          # wake-up message constantly sent
-SLEEP = "BASE,GOTOSLEEP"    # sleep message, sent on button press to deactivate the tag
-BCAST = "BASE,START,"        # start message, sent on button press to initiate gps broadcast
-ACK = "BASE,ACK"            # acknowledge receipt of message and tell tag to proceed
-STARTING = "COLLAR,STARTING"   # start message, sent on collar starting broadcast
+WAKE = "B:PING"          # wake-up message constantly sent
+SLEEP = "B:SLEEP"    # sleep message, sent on button press to deactivate the tag
+SEND_GPS = "B:GPS"        # start sending gps  message, sent on button press to initiate gps broadcast
+MAX_MSG = 30                # how many times to send an instruction before giving up
 
 
 # RADIO
 RADIO_FREQ_MHZ = 869.45
 MAX_TX_POWER = 23
 
+BASE_ID = 0
 NO_COLLAR = -1              # ID to return if no collar is found
 COLLAR_TIME_OUT = 120       # how long to wait before giving up on a collar
 
@@ -83,6 +83,10 @@ displayio.release_displays()
 button_A = DigitalInOut(board.D9)
 button_A.direction = Direction.INPUT
 button_A.pull = Pull.UP
+
+button_B = DigitalInOut(board.D6)
+button_B.direction = Direction.INPUT
+button_B.pull = Pull.UP
 
 button_C = DigitalInOut(board.D5)
 button_C.direction = Direction.INPUT
@@ -120,23 +124,26 @@ Initialise the LORA radio
 """
 spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
 
+while not spi.try_lock():
+    spi.configure(baudrate=12000000)
+spi.unlock()
+
 # Define pins connected to the chip - this needs some wiring on the LoRa featherwing
 # CS needs to be wired to B and RST needs to be wired to A and soldered in 
 CS = digitalio.DigitalInOut(board.D10)
 RESET = digitalio.DigitalInOut(board.D11)
 
+
 # Initialze RFM radio
-#rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ, agc=True)
+rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
 
-rfm9x = ulora.LoRa(spi, CS, modem_config=ulora.ModemConfig.Bw125Cr45Sf2048,tx_power=MAX_TX_POWER,freq=RADIO_FREQ_MHZ) 
-# Set to max transmit power!
-#rfm9x.tx_power = MAX_TX_POWER
-#rfm9x.spreading_factor = 8
-#rfm9x.signal_bandwidth = 250000#a62500
-#rfm9x.coding_rate = 5
+# high power radios like the RFM95 can go up to 23 dB:
+rfm9x.tx_power = 23
+rfm9x.spreading_factor = 11
+rfm9x.signal_bandwidth = 125000
+rfm9x.coding_rate = 5
 
-#print(rfm9x.bw_bins)
-
+rfm9x.node = BASE_ID
 """
 Send a wakeup message to any tags in the vicinity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -147,16 +154,16 @@ def send_wakeup():
     if DEBUG: 
         print("sending wake up message", WAKE)
     # send a broadcast mesage
-    rfm9x.send(bytes(WAKE, "UTF-8"),0)
+    rfm9x.send(bytes(WAKE, "UTF-8"))
 
     # Look for a new packet - wait up to 1 seconds:
-    packet = rfm9x.receive(timeout=1.0)
+    packet = rfm9x.receive(timeout=10.0)
     if packet is not None:
         try:
-            txtpacket = packet.decode()
+            txtpacket = str(packet, "UTF-8")
+
             print('received', txtpacket)
-            txtpacket = txtpacket.split(",")
-            print(txtpacket)
+            txtpacket = txtpacket.split(":")
             if txtpacket[1]=="AWAKE":
                 collar_id = int(txtpacket[0])
                 print(collar_id)
@@ -171,73 +178,24 @@ Send a sleep message to the active tag
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 def send_sleep(collar_id):
-    # send a sleep message 5 times
+    # send a sleep message MAX_MSG times
     screen_write("Sending collar\nid:" + str(collar_id) + " back\nto sleep.")
-    for i in range(5):
-        rfm9x.send(bytes(SLEEP+str(collar_id), "UTF-8"),0)
-        sleep(1)
+    for i in range(MAX_MSG):
+        rfm9x.send(bytes(SLEEP, "UTF-8"),destination=collar_id)
+        #packet = rfm9x.receive(timeout=1.0)             # check if there's a message
+        #if packet is not None:
+        #    try:
+        #        txtpacket = str(packet, "ascii")
+        #        print(txtpacket)
+        #        if txtpacket == SLEEPING:
+        #            screen_write("Collar " + str(collar_id) + " sleeping")
+        #            sleep(2)
+        #            break
+        #    except:
+        #        # any errors in the decoding we'll just continue
+        #        pass
 
-"""
-Send a wake message to the active tag
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
-def send_start(collar_id):
-    # send a sleep message 5 times
-    screen_write("Sending collar\nid:" + str(collar_id) + " wake up.")
-    for i in range(5):
-        rfm9x.send(bytes(BCAST+str(collar_id), "UTF-8"),0)
-        packet = rfm9x.receive(timeout=10.0)             # check if there's a message
-        if packet is not None:
-            try:
-                txtpacket = packet.decode("UTF-8")
-                print(txtpacket)
-                if txtpacket == STARTING:
-                    forward_mode(collar_id)
-                    screen_write("Collar " + str(collar_id) + " starting\nbroadcast mode")
-            except:
-                # any errors in the decoding we'll just continue
-                pass
-
-        sleep(1)
-
-
-"""
-Standby mode - keep collar awake but send wake up or sleep messages
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
-def standby_mode(collar_id):
-
-    time_now = 0
-    timeout_count = 0
-    packet = None
-    while ble.connected or DEBUG:
-        timeout_count+=1                                # increase the counter
-        packet = rfm9x.receive(timeout=30.0)             # check if there's a message
-        if packet is not None:
-            if time.monotonic() - time_now > screen_refresh:
-                screen_write("Collar " + str(collar_id) + " connected\nHold A to send sleep\nHold C to send start\nRSSI " + str(rfm9x.last_rssi))
-                time_now = time.monotonic()
-
-            print('packet recv')
-            timeout_count = 0                           # reset the time since last msg count
-            rfm9x.send(bytes(ACK, "UTF-8"),0)             # acknowledge receipt of message
-            if DEBUG:
-                try:
-                    txtpacket = packet.decode("UTF-8")
-                    print(txtpacket)
-                except:
-                    # any errors in the decoding we'll just continue
-                    pass
-
-        if timeout_count>COLLAR_TIME_OUT:
-            send_sleep(collar_id)
-            break
-        if not button_A.value:
-            send_sleep(collar_id)
-            break
-        if not button_C.value:
-            send_start(collar_id)
-            break
+        sleep(2)
 
 
 """
@@ -246,37 +204,93 @@ Forward all messages received from the tag to the connected bluetooth device
 """
 def forward_mode(collar_id):
 
-    time_now = 0
-    timeout_count = 0
-    packet = None
-    while ble.connected:
-        timeout_count+=1                                # increase the counter
-        packet = rfm9x.receive(timeout=30.0)             # check if there's a message
-        if packet is not None:
-            if time.monotonic() - time_now > screen_refresh:
-                screen_write("Collar " + str(collar_id) + " connected\nHold A to send sleep\nRSSI " + str(rfm9x.last_rssi))
-                time_now = time.monotonic()
+    time_of_last_msg = time.monotonic()
+    time_refresh = 0
+    while ble.connected or DEBUG:
+        rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        if time.monotonic() - time_refresh > screen_refresh:
+            time_since_msg = time.monotonic() - time_of_last_msg 
+            screen_write("C" + str(collar_id) + " MODE: GPS\nHold B to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            time_refresh = time.monotonic()
 
-            print('packet recv')
-            timeout_count = 0                           # reset the time since last msg count
-            rfm9x.send(bytes(ACK, "UTF-8"),0)             # acknowledge receipt of message
+        packet = rfm9x.receive(timeout=10.0)             # check if there's a message
+        #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        if packet is not None:
+            print(packet)
+
+            time_of_last_msg = time.monotonic()
             uart.write(packet)
             if DEBUG:
                 try:
-                    txtpacket = packet.decode("UTF-8")
-                    print(txtpacket)
+                    #packet_text = str(packet, "ascii")
+                    #packet_text = packet.decode()#str(packet, "ascii")
+                    packet_text = str(packet, "UTF-8")
+                    print('RECV PACKET:', packet_text)
                 except:
                     # any errors in the decoding we'll just continue
                     pass
-        if DEBUG: 
-            continue                                    # in debug mode we will keep listening
-        if timeout_count>COLLAR_TIME_OUT:
-            send_sleep(collar_id)
-            break
-        if not button_A.value:
-            send_sleep(collar_id)
+
+        if not button_B.value:
             break
 
+"""
+Standby mode - keep collar awake but send wake up or sleep messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+def standby_mode(collar_id):
+
+    standby_send_interval = 10.0
+    time_of_last_msg = time.monotonic()
+    time_of_last_send = time.monotonic()
+    time_refresh = 0
+    while True:
+        if time.monotonic() - time_of_last_send > standby_send_interval:
+            rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
+
+            packet = rfm9x.receive(timeout=10.0)             # check if there's a message
+            rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
+            if packet is not None:
+
+                time_of_last_msg = time.monotonic()
+                try:
+                    packet_text = packet.decode()#str(packet, "ascii")
+                    print('RECV PACKET:', packet_text)
+                except:
+                    # any errors in the decoding we'll just continue
+                    pass
+            time_of_last_send = time.monotonic()
+
+        if time.monotonic() - time_refresh > screen_refresh:
+            time_since_msg = time.monotonic() - time_of_last_msg 
+            screen_write("C" + str(collar_id) + " MODE: STANDBY\nHold A to start gps\nHold C to send sleep\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            time_refresh = time.monotonic()
+        
+        if not button_A.value:
+            forward_mode(collar_id)
+        if not button_C.value:
+            break
+
+    send_sleep(collar_id)
+
+
+"""
+Connect option - option to connect based on collar ID or ignore
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+def connect_option(collar_id):
+
+
+    screen_write("Connect to collar " + str(collar_id) + "?\nHold B to connect\nHold C to ignore")
+    time_now = time.monotonic()
+    timeout = 300  # expect after 5 minutes collar will be back asleep
+    while True:
+        if time.monotonic() - time_now > timeout:
+            break
+        if not button_B.value:
+            standby_mode(collar_id)
+            break
+        if not button_C.value:
+            break
 
 
 
@@ -289,14 +303,16 @@ Main loop:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 while True:
-    screen_write("Advertising\nBLE device:\n" + ble.name)
+    screen_write("Advertising\nBLE device:\n" + ble.name + "\nHold A for debug" )
     ble.start_advertising(advertisement)
     while not ble.connected:
-        if DEBUG: break
-        pass
+        if not button_A.value:
+            DEBUG = 1
+            break
 
 
-    screen_write("Bluetooth\nconnected.\nScanning...")
+    time_now = time.monotonic()
+    screen_write("Bluetooth connected.\nBroadcasting\nwake up message...")
     # Now we're connected
     while ble.connected or DEBUG:
         # send wake-up
@@ -306,10 +322,13 @@ while True:
         
         # enter msg forwarding if we've found a collar or we're in debug mode
         if collar_id!=NO_COLLAR:
-            standby_mode(collar_id)
+            connect_option(collar_id)
 
         # wait 1 seconds between wake up messages
         sleep(1) 
 
+        if time.monotonic() - time_now > screen_refresh:
+            screen_write("Broadcasting\nwake up message...")
+            time_now = time.monotonic()
         
 
