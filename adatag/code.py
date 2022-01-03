@@ -1,26 +1,27 @@
 # Author: Cyrus, Colin, Grant
 # Date: Oct 2021
+import gc
+
+import adafruit_gps
 import time
 import board
 import busio
 from time import sleep
-import adafruit_gps
 import digitalio
-import ulora
 
+import adafruit_rfm9x
 
 # Constant parameters
 SLEEP_INTERVAL = 30*60  # time to sleep between checking for radio in seconds
-LISTEN_TIME = 60*5      # time to listen for a wake up message
-NO_MSG_LIMIT = 10*60    # time without contact before returning to sleep
+NO_MSG_LIMIT = 5*60    # time without contact before returning to sleep
 RADIO_FREQ_MHZ = 869.45 # Frequency of the radio in Mhz. 
-COLLAR_ID = "1"    # name the collar ID
+COLLAR_ID = 1    # specify the collar ID - should be an integer less than 255 and greater than 0 (0 is the base station ID) 
+BASE_ID = 0
+
 # RADIO MESSAGES
-WAKE = "BASE,PING"          # wake-up message constantly sent
-SLEEP = "BASE,GOTOSLEEP"    # sleep message, sent on button press to deactivate the tag
-BCAST = "BASE,START,"        # start message, sent on button press to initiate gps broadcast
-START = "COLLAR,STARTING"   # start message, sent on button press to initiate gps broadcast
-ACK = "BASE,ACK"            # acknowledge receipt of message and tell tag to proceed
+WAKE = "B:PING"     # wake-up message constantly sent
+SLEEP = "B:SLEEP"   # sleep message, sent on button press to deactivate the tag
+SEND_GPS = "B:GPS"  # start sending gps  message, sent on button press to initiate gps broadcast
 
 CS = digitalio.DigitalInOut(board.RFM9X_CS)
 RESET = digitalio.DigitalInOut(board.RFM9X_RST)
@@ -28,121 +29,121 @@ RESET = digitalio.DigitalInOut(board.RFM9X_RST)
 # Initialize SPI bus.
 spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
 
+while not spi.try_lock():
+    spi.configure(baudrate=12000000)
+spi.unlock()
 # Initialze RFM radio
-rfm9x = ulora.LoRa(spi, CS, modem_config=ulora.ModemConfig.Bw125Cr45Sf2048,tx_power=23,freq=RADIO_FREQ_MHZ) 
+rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
 
-uart = busio.UART(board.TX, board.RX, baudrate=9600, timeout=10)
+# high power radios like the RFM95 can go up to 23 dB:
+rfm9x.tx_power = 23
+rfm9x.spreading_factor = 11
+rfm9x.signal_bandwidth = 125000
+rfm9x.coding_rate = 5
+
+rfm9x.node = COLLAR_ID
+
+uart = busio.UART(board.TX, board.RX, baudrate=9600, timeout=0.1,receiver_buffer_size=128)
 
 # Create a GPS module instance.
 gps = adafruit_gps.GPS(uart, debug=False)  # Use UART/pyserial
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# sleep mode
-# - check that gps is in low power mode
-# - wait for fixed amount of time before checking the radio again
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def sleep_mode():
-    gps.send_command(b"PMTK161,0") #set GPS in to low power mode
-    time.sleep(SLEEP_INTERVAL) 
-    return 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# standby mode function
-# - base station is in the area so start gps
-# - check for wake up message
-# - back to sleep if no wake up after fixed time interval
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def standby_mode():
-    
+SLEEP_MODE=0
+STANDBY_MODE=0
+GPS_MODE=0
+
+gps_send_interval=30
+
+
+def initiate_sleep_mode():
+    gps.send_command(b"PMTK161,0") #set GPS in to low power mode
+    return
+
+
+
+def initiate_standby_mode():
     # Turn on just minimum info (RMC only, location):
     gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
     # Set update rate to 60s fixes to get the gps ready 
     gps.send_command(b"PMTK220,60000")
-    
-    time_of_last_msg = time.monotonic()
-    
-    while True:
-        # send collar ID to base station
-        rfm9x.send(bytes(COLLAR_ID + ',AWAKE', "utf-8"),0)  
-        print("Standby mode: listening for message")
-        packet = rfm9x.receive(timeout=5.0)
-        if packet is not None:
-            time_of_last_msg = time.monotonic()
-            try: 
-                packet_text = str(packet, "ascii")
-                print("Received (ASCII):\n {0}".format(packet_text))
-                # print(packet)
-                if packet_text == BCAST + COLLAR_ID:
-                    print("GPS intiated")
-                    message = "broadcast mode\ninitiated"
-                    rfm9x.send(bytes(message, "utf-8"),0)  # send via radio
-                    # activate broadcast 
-                    broadcast_mode() 
-                    return
-                if packet_text == SLEEP:
-                    rfm9x.send(bytes("low power\nmode activated", "utf-8"))
-                    return
-            except:
-                pass
-        if time.monotonic() - time_of_last_msg > NO_MSG_LIMIT: 
-            print("standby mode terminated")
-            return  
+    # send collar ID to base station
+    print('sending awake message')
+    rfm9x.send(bytes(str(COLLAR_ID) + ':AWAKE', "utf-8"),destination=BASE_ID)  
+
+    return
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# broadcast function
-def broadcast_mode():
-    
-    # Set update rate to once a second (1hz) which is what you typically want.
+def initiate_gps_mode():
+    # Turn on just minimum info (RMC only, location):
+    gps.send_command(b'PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
+    # Set gps update rate to 1s fixes 
     gps.send_command(b"PMTK220,1000")
+    return
 
-    # ~~~~~Main loop runs forever printing the location, etc. every second.
-    time_of_last_msg = time.monotonic()
-    time_of_last_check = time.monotonic()
-    
-    CHECK_INTERVAL = 5
-    
+def one_step_sleep_mode():
+    print('one step sleep')
+    time.sleep(SLEEP_INTERVAL) 
+    return
+
+def one_step_standby_mode():
+    print('one step standby')
+    rfm9x.send(bytes(str(COLLAR_ID) + ':AWAKE', "utf-8"),destination=BASE_ID)  
+    return 
+
+def one_step_gps_mode():
+    print('one step gps')
+    start_send_time = time.monotonic()
     while True:
-        # gps.update()
         sentence = gps._read_sentence()
-        if sentence is None:
-            continue
-        rfm9x.send(bytes(sentence + '\n', "utf-8"))
-          
-        if time.monotonic() - time_of_last_check > CHECK_INTERVAL: # check incoming messages and execute the relevant command 
-            packet = rfm9x.receive(timeout=0.5)
-            time_of_last_check = time.monotonic()
-            if packet is not None:
-                time_of_last_msg = time.monotonic()
-                try:
-                    packet_text = str(packet, "ascii")
-                    if packet_text==SLEEP: #exit broadcast mode and return to standby mode
-                        return
-                except:
-                    pass
-        
-        if time.monotonic() - time_of_last_msg > NO_MSG_LIMIT: #exit broadcast mode and return to standby mode
-            return  
-            
+        if sentence is not None:
+            message = sentence[7:44] # use as small a packet as possible 
+            rfm9x.send(bytes(message, "utf-8"),destination=BASE_ID)
+        if time.monotonic() - start_send_time > gps_send_interval: 
+            break
+    return 
 
+
+time_of_last_recv = time.monotonic()
+time_of_last_send = time.monotonic()
+
+receive_timeout = 20.0
 # Main loop
 while True:
-    start_listen_time = time.monotonic()
-    print("listening...")
-    while True:
-        # Listen for incoming message for 5 minutes duration
-        packet = rfm9x.receive(timeout=1.0) 
-        if packet is not None:
-            print("Received (ASCII):\n {0}".format(packet))
-            standby_mode()
-            break
-        else:
-            print("no message received")
-        if time.monotonic()-start_listen_time > LISTEN_TIME:
-            break
-        time.sleep(2.0) 
+    if time.monotonic() - time_of_last_recv > NO_MSG_LIMIT: 
+        initiate_sleep_mode()
+    print("checking for message...")
+    packet = rfm9x.receive(timeout=receive_timeout) 
+    if packet is not None:
+        print("message received...")
+        time_of_last_recv = time.monotonic()
+        packet_text = str(packet, "ascii")
+        if packet_text==SLEEP and not SLEEP_MODE:
+            print("initiate sleep mode..")
+            initiate_sleep_mode()
+            STANDBY_MODE=GPS_MODE=0
+            SLEEP_MODE=1
+            receive_timeout = 20.0
+        if packet_text==WAKE and not STANDBY_MODE:
+            print("initiate standby mode..")
+            initiate_standby_mode()
+            time_of_last_send = time.monotonic()
+            SLEEP_MODE=GPS_MODE=0
+            STANDBY_MODE=1
+            receive_timeout = 20.0
+        if packet_text==SEND_GPS and not GPS_MODE:
+            print("initiate gps mode..")
+            initiate_gps_mode()
+            SLEEP_MODE=STANDBY_MODE=0
+            GPS_MODE=1
+            receive_timeout = 2.0
+
+    if SLEEP_MODE:
+        one_step_sleep_mode()
+        time_of_last_recv = time.monotonic()
+    if STANDBY_MODE:
+        one_step_standby_mode()
+    if GPS_MODE:
+        one_step_gps_mode()
     
-    print("has entered sleep interval")
-    # enter sleep mode
-    sleep_mode()
     
