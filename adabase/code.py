@@ -39,7 +39,7 @@ from adafruit_bluefruit_connect.packet import Packet
 
 import adafruit_rfm9x
 
-DEBUG = 0                   # In debug mode we just listen and forward
+DEBUG = 1                   # In debug mode we just listen and forward
 """
 Constant parameters
 """
@@ -206,7 +206,7 @@ def forward_mode(collar_id):
 
     time_of_last_msg = time.monotonic()
     time_refresh = 0
-    while ble.connected or DEBUG:
+    while True:
         rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
         if time.monotonic() - time_refresh > screen_refresh:
             time_since_msg = time.monotonic() - time_of_last_msg 
@@ -216,14 +216,11 @@ def forward_mode(collar_id):
         packet = rfm9x.receive(timeout=10.0)             # check if there's a message
         #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
         if packet is not None:
-            print(packet)
-
             time_of_last_msg = time.monotonic()
-            uart.write(packet)
+            if ble.connected: 
+                uart.write(packet)
             if DEBUG:
                 try:
-                    #packet_text = str(packet, "ascii")
-                    #packet_text = packet.decode()#str(packet, "ascii")
                     packet_text = str(packet, "UTF-8")
                     print('RECV PACKET:', packet_text)
                 except:
@@ -232,6 +229,11 @@ def forward_mode(collar_id):
 
         if not button_B.value:
             break
+        if not ble.connected and not ble.advertising: 
+                #ble.stop_advertising()
+            #uart = UARTService()
+            #advertisement = ProvideServicesAdvertisement(uart)
+            ble.start_advertising(advertisement)
 
 """
 Standby mode - keep collar awake but send wake up or sleep messages
@@ -269,6 +271,11 @@ def standby_mode(collar_id):
             forward_mode(collar_id)
         if not button_C.value:
             break
+        if not ble.connected and not ble.advertising: 
+                #ble.stop_advertising()
+            #uart = UARTService()
+            #advertisement = ProvideServicesAdvertisement(uart)
+            ble.start_advertising(advertisement)
 
     send_sleep(collar_id)
 
@@ -303,12 +310,12 @@ Main loop:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 while True:
-    screen_write("Advertising\nBLE device:\n" + ble.name + "\nHold A for debug" )
+    screen_write("BLE device:\n" + ble.name + "\nConnect or press\nA to continue" )
     ble.start_advertising(advertisement)
     while not ble.connected:
         if not button_A.value:
-            DEBUG = 1
             break
+    ble.stop_advertising()
 
 
     time_now = time.monotonic()

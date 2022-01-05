@@ -97,7 +97,7 @@ def one_step_gps_mode():
     while True:
         sentence = gps._read_sentence()
         if sentence is not None:
-            message = sentence[7:44] # use as small a packet as possible 
+            message = sentence[7:44] + "\n" # use as small a packet as possible 
             rfm9x.send(bytes(message, "utf-8"),destination=BASE_ID)
         if time.monotonic() - start_send_time > gps_send_interval: 
             break
