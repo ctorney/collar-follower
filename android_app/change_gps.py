@@ -16,7 +16,7 @@ System = autoclass('java.lang.System')
 # GPS spoofer with alpha-beta filter
 class changeGPS():
 
-    def __init__(self, alpha=0.95, beta=0.95):
+    def __init__(self, alpha=0.95, beta=0.8):
 
         self.lm = activity.getSystemService(Context.LOCATION_SERVICE)
 
@@ -42,11 +42,13 @@ class changeGPS():
         self.speed_lat = 0.0
         self.speed_lon = 0.0
 
+        self.delay_time = 2.0 # seconds to add to account for the delay in transmitting the location
+
     
     def add_location(self, lat, lon):
 
 
-        time_now = time.monotonic()
+        time_now = time.monotonic() - self.delay_time
 
         if self.update_time is None:
             # first update

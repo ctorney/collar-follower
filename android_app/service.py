@@ -39,8 +39,11 @@ class serviceRunner():
             if sentence.startswith('INFO'):  # is an info msg
                 self.send_msg(sentence) 
                 return 
+            sentence = "$GPRMC," + sentence   # treat everything as RMC as this is the basic location we will be sending
             parsed = pynmea2.parse(sentence)
-        except:
+        #except:
+        except Exception as e:
+            self.send_msg("parse_msg error: " + str(e))
             return 
 
 
