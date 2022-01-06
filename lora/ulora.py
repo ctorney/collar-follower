@@ -163,7 +163,10 @@ class LoRa(object):
             self._spi_write(REG_01_OP_MODE, MODE_STDBY)
             self._mode = MODE_STDBY
 
-    def send(self, data, header_to=0, header_id=0, header_flags=0):
+    def broadcast(self, data, header_id=0, header_flags=0):
+        return self.send(data, header_to=BROADCAST_ADDRESS, header_id=header_id, header_flags=header_flags)
+    
+    def send(self, data, header_to, header_id=0, header_flags=0):
         self.set_mode_idle()
 
         header = [header_to, self._this_address, header_id, header_flags]
@@ -225,12 +228,13 @@ class LoRa(object):
 
                 if packet_len >= 4:
                     header_to = packet[0]
-                    header_from = packet[1]
-                    header_id = packet[2]
-                    header_flags = packet[3]
-                    message = bytes(packet[4:]) if packet_len > 4 else b''
+                    if header_to == self._this_address or header_to == BROADCAST_ADDRESS:
+                        header_from = packet[1]
+                        header_id = packet[2]
+                        header_flags = packet[3]
+                        message = bytes(packet[4:]) if packet_len > 4 else b''
 
-                    self.last_msg = message
+                        self.last_msg = message
                 break
 
         self.set_mode_idle()
@@ -248,6 +252,11 @@ class LoRa(object):
         elif type(payload) == str:
             payload = [ord(s) for s in payload]
 
+        print('------------')
+        print(len(payload))
+        for p in payload: 
+            print(p)
+        print('------------')
         with self._device as device:
             device.write(bytearray([register | 0x80] + payload))
 

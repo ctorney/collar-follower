@@ -43,6 +43,7 @@ class changeGPS():
         self.speed_lon = 0.0
 
         self.delay_time = 2.0 # seconds to add to account for the delay in transmitting the location
+        self.max_predict_time = 10.0 # maximum time without a fix to predict ahead location 
 
     
     def add_location(self, lat, lon):
@@ -79,6 +80,7 @@ class changeGPS():
             t = time.monotonic()
 
         delta_t = t - self.update_time
+        delta_t = min(delta_t,self.max_predict_time)
         pred_lat = self.last_lat + (delta_t * self.speed_lat)
         pred_lon = self.last_lon + (delta_t * self.speed_lon)
 
@@ -89,7 +91,10 @@ class changeGPS():
     def update_locale(self):
 
         lat, lon = self.predict()
-           
+        
+        t = time.monotonic()
+        accuracy = t - self.update_time # use time since last update as accuracy 
+
         mockLocation = Location(self.providerName)
         mockLocation.setLatitude(lat)
         mockLocation.setLongitude(lon)
@@ -97,7 +102,7 @@ class changeGPS():
         mockLocation.setTime(System.currentTimeMillis())
         mockLocation.setSpeed(0.0)
         mockLocation.setBearing(1)
-        mockLocation.setAccuracy(1.8)
+        mockLocation.setAccuracy(accuracy)
         mockLocation.setBearingAccuracyDegrees(0.1)
         mockLocation.setVerticalAccuracyMeters(0.1)
         mockLocation.setSpeedAccuracyMetersPerSecond(0.01)
