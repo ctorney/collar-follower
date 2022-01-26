@@ -58,7 +58,8 @@ MAX_MSG = 30                # how many times to send an instruction before givin
 
 
 # RADIO
-RADIO_FREQ_MHZ = 869.45
+RADIO_FREQ_MHZ = 868.00
+#RADIO_FREQ_MHZ = 869.45 # Frequency of the radio in Mhz. 
 MAX_TX_POWER = 23
 
 BASE_ID = 0
@@ -160,6 +161,8 @@ def send_wakeup():
     packet = rfm9x.receive(timeout=10.0)
     if packet is not None:
         try:
+            #debug
+            collar_id = 1
             txtpacket = str(packet, "UTF-8")
 
             print('received', txtpacket)
@@ -207,14 +210,14 @@ def forward_mode(collar_id):
     time_of_last_msg = time.monotonic()
     time_refresh = 0
     while True:
-        rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
         if time.monotonic() - time_refresh > screen_refresh:
             time_since_msg = time.monotonic() - time_of_last_msg 
-            screen_write("C" + str(collar_id) + " MODE: GPS\nHold B to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            screen_write("C" + str(collar_id) + " MODE: GPS\nHold AB to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
             time_refresh = time.monotonic()
 
         packet = rfm9x.receive(timeout=10.0)             # check if there's a message
-        #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
         if packet is not None:
             time_of_last_msg = time.monotonic()
             if ble.connected: 
@@ -227,7 +230,7 @@ def forward_mode(collar_id):
                     # any errors in the decoding we'll just continue
                     pass
 
-        if not button_B.value:
+        if not button_A.value:
             break
         if not ble.connected and not ble.advertising: 
                 #ble.stop_advertising()
@@ -287,13 +290,13 @@ Connect option - option to connect based on collar ID or ignore
 def connect_option(collar_id):
 
 
-    screen_write("Connect to collar " + str(collar_id) + "?\nHold B to connect\nHold C to ignore")
+    screen_write("Connect to collar " + str(collar_id) + "?\nHold A to connect\nHold C to ignore")
     time_now = time.monotonic()
     timeout = 300  # expect after 5 minutes collar will be back asleep
     while True:
         if time.monotonic() - time_now > timeout:
             break
-        if not button_B.value:
+        if not button_A.value:
             standby_mode(collar_id)
             break
         if not button_C.value:
