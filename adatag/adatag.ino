@@ -1,35 +1,67 @@
+
+/*
+# Copyright 2022 Colin Torney
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+*/
+
+
 #include <SPI.h>
 #include <LoRa.h>
 
-#define DIO0 3
-#define SS   8
-#define RESET 4
+
 
 #include <SAMDTimerInterrupt.h>
 #include <SAMD_ISR_Timer.h>
 #include <Adafruit_GPS.h>
 
+#define GPSSerial Serial1
 
 #define GPS_INTERRUPT_MS        10     // 1s = 1000ms
 #define NMEA_SENTENCE_MAX_LEN   82     
 
 
-
+#define DIO0 3
+#define SS   8
+#define RESET 4
 
 #define RF95_FREQ 868.0
 
+#define SLEEP_MODE  0x01   // sleep
+#define STDBY_MODE  0x02   // standing by
+#define BCGPS_MODE  0x03   // broadcast GPS
 
-#define CLIENT_ADDRESS 1
-#define SERVER_ADDRESS 2
- 
-int spreadingFactor =11;
+// RADIO MESSAGES
+#define WAKE "B:PING"     // wake-up message constantly sent
+#define SLEEP "B:SLEEP"   // sleep message, sent on button press to deactivate the tag
+#define SEND_GPS "B:GPS"  // start sending gps  message, sent on button press to initiate gps broadcast
+
+#define RESPONSE "AWAKE"     // response to wake-up message
+
+volatile byte mode = 0x00;
+volatile byte mode_change = 0;
+
+volatile unsigned long time_of_last_message;  //some global variables available anywhere in the program
+
+const unsigned long SLEEP_INTERVAL = 30*60*1000;  //// time to sleep between checking for radio in milliseconds
+const unsigned long NO_MSG_LIMIT = 5*60*1000;    // time without contact before returning to sleep
+
+
+int spreadingFactor = 7;
 long signalBandwidth = 125E3;
 int codingRateDenominator = 5;
 
-// what's the name of the hardware serial port?
-#define GPSSerial Serial1
 
-// Connect to the GPS on the hardware port
 Adafruit_GPS GPS(&GPSSerial);
 
 
@@ -37,44 +69,34 @@ uint32_t timer = millis();
 
 
 
-byte msgCount = 0;            // count of outgoing messages
-byte localAddress = 1;     // address of this device
-byte destination = 0;      // destination to send to
+byte msgflag = 0;            // unused message flag
+byte collar_id = 1;     // address of this device
+byte base_id = 0;      // destination to send to
 
 
 
-void gps_interrupt(void)
-{
-    GPS.read();
-}
+// interrupt to read GPS 
+void gps_interrupt(void) {if (mode!=SLEEP_MODE) GPS.read();}
 
 void setup()
 {
   Serial.begin(115200);
-  Serial.println("Adafruit GPS library basic parsing test!");
-  // Init timer ITimer1
+  Serial.println("Adafruit GPS collar and LoRa broadcaster.");
+
+  // create the GPS interrupt
   SAMDTimer ITimer0(TIMER_TC3);  
-//  // Interval in microsecs
-  if (ITimer0.attachInterruptInterval(GPS_INTERRUPT_MS * 1000, gps_interrupt))
-    Serial.println("Starting  ITimer0 OK, millis() = " + String(millis()));
-  else
-    Serial.println("Can't set ITimer0. Select another freq. or timer");
-  pinMode(LED_BUILTIN, OUTPUT);
+  ITimer0.attachInterruptInterval(GPS_INTERRUPT_MS * 1000, gps_interrupt)    // interval in microsecs
+    
 
-
-  // GPS initialise
+  // initialise GPS 
   GPS.begin(9600);
-
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
-  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_100_MILLIHERTZ); // 0.1 Hz update rate
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_100_MILLIHERTZ);     // 0.1 Hz update rate on startup
   
   delay(1000);
 
 
-  // LoRa settings
-  //driver.setModemConfig(RH_RF95::Bw125Cr45Sf128);
-  //driver.setModemConfig(RH_RF95::Bw31_25Cr48Sf512);
+  // setup LoRa
   LoRa.setPins(SS, RESET, DIO0);
   
   if (!LoRa.begin(868E6)) {
@@ -84,33 +106,60 @@ void setup()
   //LoRa.setSpreadingFactor(spreadingFactor);
   LoRa.setSignalBandwidth(signalBandwidth);
   LoRa.setCodingRate4(codingRateDenominator);
-  LoRa.setTxPower(20);//, PA_OUTPUT_RFO_PIN);
+  LoRa.setTxPower(20);
   LoRa.enableCrc();
-  // register the receive callback
-  LoRa.onReceive(onReceive);
-//  LoRa.onTxDone(onTxDone);
+  
+  LoRa.onReceive(onReceive);                                // register the receive callback
   delay(1000);
+
+  time_of_last_message = millis();
+
+}
+
+
+void loop() 
+{
+  
+  delay(10);
+
+  // sleep if no message has been received for a while
+  unsigned long currentMillis = millis();  
+  if (currentMillis - time_of_last_message >= NO_MSG_LIMIT)  
+  {
+    mode=SLEEP_MODE;
+    mode_change=1;
+  }
+
+  // preparation steps if the mode has changed
+  if (mode_change) mode_update();
+
+  switch (mode)
+  {
+    case SLEEP_MODE:
+      one_step_sleep_mode();
+      break;
+    case STDBY_MODE:
+      one_step_standby_mode();
+      break;
+    case BCGPS_MODE:
+      one_step_gps_mode();
+      break;
+
+    
+  }
+  LoRa.receive();
+
   
 }
 
-//uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-
-
-//uint8_t data[] = "Hello World!";
-int counter = 0;
-
-void loop() // run over and over again
+void one_step_gps_mode()
 {
-  //Serial.println("LOOPY"); // this also sets the newNMEAreceived() flag to false
-  delay(10);
 
-  //if (0)
-  if (GPS.newNMEAreceived()) {
+  // check for GPS sentence and broadcast to base station
+  if (GPS.newNMEAreceived()) 
+  {
 
-    
-    Serial.println(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
-
-    String sentence = "";                 // payload of packet
+    String sentence = "";                 
     char *nmea = GPS.lastNMEA();
 
     for (int i = 0; i < NMEA_SENTENCE_MAX_LEN; i++) 
@@ -122,79 +171,75 @@ void loop() // run over and over again
 
     sendMessage(sentence);
 
-  
-//    LoRa.beginPacket();
-//    LoRa.write((uint8_t *)GPS.lastNMEA(), NMEA_SENTENCE_MAX_LEN);
-//    LoRa.endPacket();
-  //LoRa.beginPacket();
-  //LoRa.print("hello ");
-  //LoRa.print("hello ");
-  //LoRa.print("hello ");
-  //LoRa.print("hello ");
-
-  //LoRa.print(sentence);                 // add payload
-
-  //LoRa.print(counter);
-  //LoRa.endPacket();
-
-    
   }
-////    
+
+  // reenter receive mode
   LoRa.receive();
+
+}
+
+void one_step_standby_mode()
+{
+  Serial.println("one step standby");
+  sendMessage(RESPONSE);
+  LoRa.receive();
+  delay(2000);
   
 }
 
 
-void sendMessage(String outgoing) {
+void one_step_sleep_mode()
+{ 
+  mode = 0x00;
+  LoRa.sleep();
+  GPS.sendCommand("PMTK161,0");// set GPS in to low power mode;
+  delay(SLEEP_INTERVAL);
+  LoRa.idle();
+  time_of_last_message = millis();
 
-   while (LoRa.beginPacket() == 0) {
+}
+
+
+void mode_update()
+{
+  switch (mode)
+  { 
+    case SLEEP_MODE:      
+      Serial.println("having a sleep");
+      break;
+    case STDBY_MODE:
+      GPS.sendCommand("PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0");
+      // Set gps update rate to 60s fixes to get ready
+      GPS.sendCommand("PMTK220,60000");
+      Serial.println("entering standby");
+      break;
+    case BCGPS_MODE:
+      GPS.sendCommand("PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0");
+      // Set gps update rate to 1s fixes 
+      GPS.sendCommand("PMTK220,1000");
+      Serial.println("entering gps");
+      break;
+  }
+  mode_change=0;
+}
+
+
+void sendMessage(String outgoing) 
+{
+  while (LoRa.beginPacket() == 0) {
     Serial.print("waiting for radio ... ");
     delay(100);
   }
   LoRa.beginPacket();                   // start packet
-  LoRa.write(destination);              // add destination address
-  LoRa.write(localAddress);             // add sender address
-  LoRa.write(msgCount);                 // add message ID
+  LoRa.write(base_id);                  // add destination address
+  LoRa.write(collar_id);                // add sender address
+  LoRa.write(msgflag);                  // add message ID
   LoRa.write(outgoing.length());        // add payload length
   LoRa.print(outgoing);                 // add payload
   LoRa.endPacket();                     // finish packet and send it
-  msgCount++;                           // increment message ID
 }
 
 
-
-//uint8_t buf[20];
-
-//void loop() {
-//  Serial.print("Sending packet: ");
-//  Serial.println(counter);
-//
-//  // send packet
-//  LoRa.beginPacket();
-//  LoRa.print("hello ");
-//  LoRa.print(counter);
-//  LoRa.endPacket();
-//
-// 
-////  int packetSize = LoRa.parsePacket();
-////  if (packetSize) {
-////    Serial.print("Received packet: ");
-////    String incoming = "";
-////  if (LoRa.available())
-////  {
-////    LoRa.readBytes(buf, packetSize);
-////    Serial.println((char*)buf);
-////  }
-////
-////    Serial.print(" with RSSI ");
-////    Serial.println(LoRa.packetRssi());
-////
-////  }
-//
-//  counter++;
-//
-//  delay(1000);
-//}
 
 
 
@@ -213,17 +258,6 @@ void onReceive(int packetSize) {
     incoming += (char)LoRa.read();      // add bytes one by one
   }
 
-  //if (incomingLength != incoming.length()) {   // check length for error
-  //  Serial.println("error: message length does not match length");
-  //  return;                             // skip rest of function
-  //}
-
-  // if the recipient isn't this device or broadcast,
-  if (recipient != localAddress && recipient != 0xFF) {
-    Serial.println("This message is not for me.");
-    return;                             // skip rest of function
-  }
-
   // if message is for this device, or broadcast, print details:
   Serial.println("Received from: 0x" + String(sender, HEX));
   Serial.println("Sent to: 0x" + String(recipient, HEX));
@@ -233,19 +267,33 @@ void onReceive(int packetSize) {
   Serial.println("RSSI: " + String(LoRa.packetRssi()));
   Serial.println("Snr: " + String(LoRa.packetSnr()));
   Serial.println();
-}
-
-
-void onReceive2(int packetSize) {
-  // received a packet
-  Serial.print("Received packet '");
-
-  // read packet
-  for (int i = 0; i < packetSize; i++) {
-    Serial.print((char)LoRa.read());
+  
+  // if the recipient isn't this device or broadcast,
+  if (recipient != localAddress && recipient != 0xFF) {
+    Serial.println("This message is not for me.");
+    return;                             // skip rest of function
   }
 
-  // print RSSI of packet
-  Serial.print("' with RSSI ");
-  Serial.println(LoRa.packetRssi());
+  time_of_last_message = millis();
+
+  if ((incoming==SLEEP)&&(mode!=SLEEP_MODE))
+  {
+    mode=SLEEP_MODE;
+    mode_change=1;
+  }
+
+  if ((incoming==WAKE)&&(mode!=STDBY_MODE))
+  {
+    mode=STDBY_MODE;
+    mode_change=1;
+  }
+
+  if ((incoming==SEND_GPS)&&(mode!=BCGPS_MODE))
+  {
+    mode=BCGPS_MODE;
+    mode_change=1;
+  }
+
+  
+
 }
