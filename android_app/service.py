@@ -39,7 +39,9 @@ class serviceRunner():
             if sentence.startswith('INFO'):  # is an info msg
                 self.send_msg(sentence) 
                 return 
-            sentence = "$GPRMC," + sentence   # treat everything as RMC as this is the basic location we will be sending
+            if sentence.startswith('AWAKE'):  # this is a ping from the collar
+                return
+
             parsed = pynmea2.parse(sentence)
         #except:
         except Exception as e:
