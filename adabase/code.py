@@ -61,6 +61,8 @@ MAX_MSG = 30                # how many times to send an instruction before givin
 RADIO_FREQ_MHZ = 868.00
 #RADIO_FREQ_MHZ = 869.45 # Frequency of the radio in Mhz. 
 MAX_TX_POWER = 23
+SHORT_RANGE_SF=7
+LONG_RANGE_SF=11
 
 BASE_ID = 0
 NO_COLLAR = -1              # ID to return if no collar is found
@@ -100,7 +102,7 @@ display_bus = displayio.I2CDisplay(i2c, device_address=0x3C)
 display = adafruit_displayio_sh1107.SH1107(display_bus, width=WIDTH, height=HEIGHT)
 
 # Make the display context
-splash = displayio.Group(max_size=10)
+splash = displayio.Group()
 display.show(splash)
 
 color_bitmap = displayio.Bitmap(WIDTH, HEIGHT, 1)
@@ -140,7 +142,7 @@ rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
 
 # high power radios like the RFM95 can go up to 23 dB:
 rfm9x.tx_power = 23
-rfm9x.spreading_factor = 11
+rfm9x.spreading_factor = LONG_RANGE_SF
 rfm9x.signal_bandwidth = 125000
 rfm9x.coding_rate = 5
 
@@ -158,18 +160,16 @@ def send_wakeup():
     rfm9x.send(bytes(WAKE, "UTF-8"))
 
     # Look for a new packet - wait up to 1 seconds:
-    packet = rfm9x.receive(timeout=10.0)
+    packet = rfm9x.receive(timeout=10.0, with_header=True)
     if packet is not None:
         try:
-            #debug
-            collar_id = 1
-            txtpacket = str(packet, "UTF-8")
+            txtpacket = str(packet[4:], "UTF-8")
 
             print('received', txtpacket)
-            txtpacket = txtpacket.split(":")
-            if txtpacket[1]=="AWAKE":
-                collar_id = int(txtpacket[0])
-                print(collar_id)
+            #txtpacket = txtpacket.split(":")
+            collar_id = int(packet[1])
+                #collar_id = int(txtpacket[0])
+            print(collar_id)
         except:
             pass
     return collar_id
@@ -213,7 +213,7 @@ def forward_mode(collar_id):
         #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
         if time.monotonic() - time_refresh > screen_refresh:
             time_since_msg = time.monotonic() - time_of_last_msg 
-            screen_write("C" + str(collar_id) + " MODE: GPS\nHold AB to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            screen_write("C" + str(collar_id) + " MODE: GPS\nHold B to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
             time_refresh = time.monotonic()
 
         packet = rfm9x.receive(timeout=10.0)             # check if there's a message
@@ -230,7 +230,7 @@ def forward_mode(collar_id):
                     # any errors in the decoding we'll just continue
                     pass
 
-        if not button_A.value:
+        if not button_B.value:
             break
         if not ble.connected and not ble.advertising: 
                 #ble.stop_advertising()
@@ -244,14 +244,16 @@ Standby mode - keep collar awake but send wake up or sleep messages
 """
 def standby_mode(collar_id):
 
-    standby_send_interval = 10.0
+    standby_send_interval = 2.0
     time_of_last_msg = time.monotonic()
     time_of_last_send = time.monotonic()
     time_refresh = 0
     while True:
         if time.monotonic() - time_of_last_send > standby_send_interval:
+            rfm9x.spreading_factor = LONG_RANGE_SF
             rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
 
+            rfm9x.spreading_factor = SHORT_RANGE_SF
             packet = rfm9x.receive(timeout=10.0)             # check if there's a message
             rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
             if packet is not None:
@@ -282,6 +284,7 @@ def standby_mode(collar_id):
 
     send_sleep(collar_id)
 
+    rfm9x.spreading_factor = LONG_RANGE_SF
 
 """
 Connect option - option to connect based on collar ID or ignore
@@ -290,13 +293,19 @@ Connect option - option to connect based on collar ID or ignore
 def connect_option(collar_id):
 
 
-    screen_write("Connect to collar " + str(collar_id) + "?\nHold A to connect\nHold C to ignore")
+    screen_write("Connect to collar " + str(collar_id) + "?\nHold B to connect\nHold C to ignore")
     time_now = time.monotonic()
     timeout = 300  # expect after 5 minutes collar will be back asleep
     while True:
+        packet = rfm9x.receive(timeout=2.0)             # check if there's a message
+        if packet is not None:
+            if ble.connected: 
+                uart.write(packet)
+        if not ble.connected and not ble.advertising: 
+            ble.start_advertising(advertisement)
         if time.monotonic() - time_now > timeout:
             break
-        if not button_A.value:
+        if not button_B.value:
             standby_mode(collar_id)
             break
         if not button_C.value:
