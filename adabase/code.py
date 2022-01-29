@@ -37,7 +37,7 @@ from adafruit_ble.services.nordic import UARTService
 
 from adafruit_bluefruit_connect.packet import Packet
 
-import adafruit_rfm9x
+import ulora
 
 DEBUG = 1                   # In debug mode we just listen and forward
 """
@@ -62,7 +62,8 @@ RADIO_FREQ_MHZ = 868.00
 #RADIO_FREQ_MHZ = 869.45 # Frequency of the radio in Mhz. 
 MAX_TX_POWER = 23
 SHORT_RANGE_SF=7
-LONG_RANGE_SF=11
+SHORT_RANGE_CONFIG = ulora.ModemConfig.Bw125Cr45Sf128 
+LONG_RANGE_CONFIG  = ulora.ModemConfig.Bw125Cr48Sf4096 
 
 BASE_ID = 0
 NO_COLLAR = -1              # ID to return if no collar is found
@@ -138,15 +139,16 @@ RESET = digitalio.DigitalInOut(board.D11)
 
 
 # Initialze RFM radio
-rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
+#rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
+rfm9x = ulora.LoRa(spi, CS, modem_config=LONG_RANGE_CONFIG,tx_power=23,this_address=0) 
 
 # high power radios like the RFM95 can go up to 23 dB:
-rfm9x.tx_power = 23
-rfm9x.spreading_factor = LONG_RANGE_SF
-rfm9x.signal_bandwidth = 125000
-rfm9x.coding_rate = 5
+#rfm9x.tx_power = 23
+#rfm9x.spreading_factor = LONG_RANGE_SF
+#rfm9x.signal_bandwidth = 125000
+#rfm9x.coding_rate = 5
 
-rfm9x.node = BASE_ID
+#rfm9x.node = BASE_ID
 """
 Send a wakeup message to any tags in the vicinity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -157,17 +159,17 @@ def send_wakeup():
     if DEBUG: 
         print("sending wake up message", WAKE)
     # send a broadcast mesage
-    rfm9x.send(bytes(WAKE, "UTF-8"))
+    rfm9x.broadcast(bytes(WAKE, "UTF-8"))
 
     # Look for a new packet - wait up to 1 seconds:
-    packet = rfm9x.receive(timeout=10.0, with_header=True)
+    packet, from_id = rfm9x.receive(timeout=10.0)
     if packet is not None:
         try:
-            txtpacket = str(packet[4:], "UTF-8")
+            txtpacket = str(packet, "UTF-8")
 
             print('received', txtpacket)
             #txtpacket = txtpacket.split(":")
-            collar_id = int(packet[1])
+            collar_id = int(from_id)
                 #collar_id = int(txtpacket[0])
             print(collar_id)
         except:
@@ -216,8 +218,10 @@ def forward_mode(collar_id):
             screen_write("C" + str(collar_id) + " MODE: GPS\nHold B to standby\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
             time_refresh = time.monotonic()
 
-        packet = rfm9x.receive(timeout=10.0)             # check if there's a message
-        rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        #packet = rfm9x.receive(timeout=10.0)             # check if there's a message
+        packet = rfm9x.receive(timeout=10.0, from_id=collar_id)             # check if there's a message
+        #rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)             # send GPS instruction
+        rfm9x.send(bytes(SEND_GPS, "UTF-8"),destination=collar_id)
         if packet is not None:
             time_of_last_msg = time.monotonic()
             if ble.connected: 
@@ -250,11 +254,15 @@ def standby_mode(collar_id):
     time_refresh = 0
     while True:
         if time.monotonic() - time_of_last_send > standby_send_interval:
-            rfm9x.spreading_factor = LONG_RANGE_SF
+            rfm9x.set_modem_config(LONG_RANGE_CONFIG)
+            sleep(0.1)
+            #rfm9x.spreading_factor = LONG_RANGE_SF
             rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
 
-            rfm9x.spreading_factor = SHORT_RANGE_SF
-            packet = rfm9x.receive(timeout=10.0)             # check if there's a message
+            #rfm9x.spreading_factor = SHORT_RANGE_SF
+            rfm9x.set_modem_config(SHORT_RANGE_CONFIG)
+            sleep(0.1)
+            packet = rfm9x.receive(timeout=10.0, from_id=collar_id)             # check if there's a message
             rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
             if packet is not None:
 
@@ -283,8 +291,10 @@ def standby_mode(collar_id):
             ble.start_advertising(advertisement)
 
     send_sleep(collar_id)
+    rfm9x.set_modem_config(LONG_RANGE_CONFIG)
+    sleep(0.1)
 
-    rfm9x.spreading_factor = LONG_RANGE_SF
+    #rfm9x.spreading_factor = LONG_RANGE_SF
 
 """
 Connect option - option to connect based on collar ID or ignore
@@ -297,8 +307,15 @@ def connect_option(collar_id):
     time_now = time.monotonic()
     timeout = 300  # expect after 5 minutes collar will be back asleep
     while True:
-        packet = rfm9x.receive(timeout=2.0)             # check if there's a message
+        packet = rfm9x.receive(timeout=10.0, from_id=collar_id)             # check if there's a message
         if packet is not None:
+            try:
+                packet_text = packet.decode()#str(packet, "ascii")
+                print('RECV PACKET:', packet_text)
+                print('RSSi:' + str(rfm9x.last_rssi))
+            except:
+                # any errors in the decoding we'll just continue
+                pass
             if ble.connected: 
                 uart.write(packet)
         if not ble.connected and not ble.advertising: 
@@ -310,6 +327,8 @@ def connect_option(collar_id):
             break
         if not button_C.value:
             break
+
+        rfm9x.broadcast(bytes(WAKE, "UTF-8"))
 
 
 
