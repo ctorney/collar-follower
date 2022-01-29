@@ -82,7 +82,6 @@ class LoRa(object):
         self._mode = None
         self._freq = freq
         self._tx_power = tx_power
-        self._modem_config = modem_config
         self._receive_all = receive_all
         self._acks = acks
 
@@ -112,10 +111,7 @@ class LoRa(object):
         
         self.set_mode_idle()
 
-        # set modem config
-        self._spi_write(REG_1D_MODEM_CONFIG1, self._modem_config[0])
-        self._spi_write(REG_1E_MODEM_CONFIG2, self._modem_config[1])
-        self._spi_write(REG_26_MODEM_CONFIG3, self._modem_config[2])
+        self.set_modem_config(modem_config)
 
         # set preamble length (8)
         self._spi_write(REG_20_PREAMBLE_MSB, 0)
@@ -141,6 +137,16 @@ class LoRa(object):
 
         self._spi_write(REG_09_PA_CONFIG, PA_SELECT | (self._tx_power - 5))
         
+
+    def set_modem_config(self, modem_config):
+        self.set_mode_idle()
+
+        # set modem config
+        self._spi_write(REG_1D_MODEM_CONFIG1, modem_config[0])
+        self._spi_write(REG_1E_MODEM_CONFIG2, modem_config[1])
+        self._spi_write(REG_26_MODEM_CONFIG3, modem_config[2])
+
+
     def sleep(self):
         if self._mode != MODE_SLEEP:
             self._spi_write(REG_01_OP_MODE, MODE_SLEEP)
@@ -164,12 +170,12 @@ class LoRa(object):
             self._mode = MODE_STDBY
 
     def broadcast(self, data, header_id=0, header_flags=0):
-        return self.send(data, header_to=BROADCAST_ADDRESS, header_id=header_id, header_flags=header_flags)
+        return self.send(data, destination=BROADCAST_ADDRESS, header_id=header_id, header_flags=header_flags)
     
-    def send(self, data, header_to, header_id=0, header_flags=0):
+    def send(self, data, destination, header_id=0, header_flags=0):
         self.set_mode_idle()
 
-        header = [header_to, self._this_address, header_id, header_flags]
+        header = [destination, self._this_address, header_id, header_flags]
         if type(data) == int:
             data = [data]
         elif type(data) == bytes:
@@ -195,10 +201,11 @@ class LoRa(object):
         self.set_mode_idle()
         return msg_sent
 
-    def receive(self, timeout=5.0):
+    def receive(self, timeout=5.0, from_id=None):
         self.set_mode_rx()
         start = time.monotonic()
         message=None
+        header_from = None
         while time.monotonic() - start < timeout:
             irq_flags = self._spi_read(REG_12_IRQ_FLAGS)
 
@@ -228,8 +235,8 @@ class LoRa(object):
 
                 if packet_len >= 4:
                     header_to = packet[0]
-                    if header_to == self._this_address or header_to == BROADCAST_ADDRESS:
-                        header_from = packet[1]
+                    header_from = packet[1]
+                    if (header_to == self._this_address or header_to == BROADCAST_ADDRESS) and (header_from == from_id or from_id is None):
                         header_id = packet[2]
                         header_flags = packet[3]
                         message = bytes(packet[4:]) if packet_len > 4 else b''
@@ -239,6 +246,9 @@ class LoRa(object):
 
         self.set_mode_idle()
         self._spi_write(REG_12_IRQ_FLAGS, 0xff)
+
+        if from_id is None:
+            return message, header_from
         return message
 
 
@@ -252,11 +262,11 @@ class LoRa(object):
         elif type(payload) == str:
             payload = [ord(s) for s in payload]
 
-        print('------------')
-        print(len(payload))
-        for p in payload: 
-            print(p)
-        print('------------')
+        #print('------------')
+        #print(len(payload))
+        #'for p in payload: 
+        #    print(p)
+        #print('------------')
         with self._device as device:
             device.write(bytearray([register | 0x80] + payload))
 
