@@ -42,9 +42,9 @@
 #define BCGPS_MODE  0x03   // broadcast GPS
 
 // RADIO MESSAGES
-#define WAKE "B:PING"     // wake-up message constantly sent
+#define STDBY "B:PING"     // wake-up message constantly sent
 #define SLEEP "B:SLEEP"   // sleep message, sent on button press to deactivate the tag
-#define SEND_GPS "B:GPS"  // start sending gps  message, sent on button press to initiate gps broadcast
+#define BCGPS "B:GPS"  // start sending gps  message, sent on button press to initiate gps broadcast
 
 #define RESPONSE "AWAKE\n"     // response to wake-up message
 
@@ -54,13 +54,17 @@ volatile byte mode_change = 0;
 volatile unsigned long time_of_last_message;  //some global variables available anywhere in the program
 
 const unsigned long SLEEP_INTERVAL = 30*60*1000;  //// time to sleep between checking for radio in milliseconds
-const unsigned long NO_MSG_LIMIT = 5*60*1000;    // time without contact before returning to sleep
+const unsigned long STANDBY_LIMIT = 5*60*1000;    // time without contact before returning to standby
+const unsigned long SLEEP_LIMIT = 10*60*1000;    // time without contact before returning to sleep
 
 
-int longRangeSpreadingFactor = 11;
+int longRangeSpreadingFactor = 12;
 int shortRangeSpreadingFactor = 7;
+int longRangeCodingRateDenominator = 8;
+int shortRangeCodingRateDenominator = 5;
 long signalBandwidth = 125E3;
-int codingRateDenominator = 5;
+
+
 
 
 Adafruit_GPS GPS(&GPSSerial);
@@ -82,6 +86,7 @@ void gps_interrupt(void) {if (mode!=SLEEP_MODE) GPS.read();}
 void setup()
 {
   Serial.begin(115200);
+  delay(10000);
   // while (!Serial);
 
   Serial.println("Adafruit GPS collar and LoRa broadcaster.");
@@ -95,7 +100,9 @@ void setup()
   GPS.begin(9600);
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_100_MILLIHERTZ);     // 0.1 Hz update rate on startup
-  GPS.sendCommand(PMTK_API_SET_FIX_CTL_100_MILLIHERTZ);     // 0.1 Hz update rate on startup
+  //GPS.sendCommand(PMTK_API_SET_FIX_CTL_100_MILLIHERTZ);     // 0.1 Hz update rate on startup
+  GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);     // Set gps update rate to 1s fixes 
+
   
   delay(1000);
 
@@ -109,7 +116,7 @@ void setup()
   }
   LoRa.setSpreadingFactor(longRangeSpreadingFactor);
   LoRa.setSignalBandwidth(signalBandwidth);
-  LoRa.setCodingRate4(codingRateDenominator);
+  LoRa.setCodingRate4(longRangeCodingRateDenominator);
   LoRa.setTxPower(20);
   LoRa.enableCrc();
   
@@ -128,11 +135,7 @@ void loop()
 
   // sleep if no message has been received for a while
   unsigned long currentMillis = millis();  
-  if (currentMillis - time_of_last_message >= NO_MSG_LIMIT)  
-  {
-    mode=SLEEP_MODE;
-    mode_change=1;
-  }
+  if (currentMillis - time_of_last_message >= SLEEP_LIMIT){mode=SLEEP_MODE;mode_change=1;}
 
   // preparation steps if the mode has changed
   if (mode_change) mode_update();
@@ -147,6 +150,7 @@ void loop()
       break;
     case BCGPS_MODE:
       one_step_gps_mode();
+      if (currentMillis - time_of_last_message >= STANDBY_LIMIT){mode=STDBY_MODE;mode_change=1;}
       break;
 
     
@@ -223,6 +227,8 @@ void one_step_sleep_mode()
   delay(SLEEP_INTERVAL);
   LoRa.idle();
   LoRa.setSpreadingFactor(longRangeSpreadingFactor);
+  LoRa.setCodingRate4(longRangeCodingRateDenominator);
+
   time_of_last_message = millis();
 
 }
@@ -239,12 +245,11 @@ void mode_update()
       GPS.wakeup();// wake GPS
       // Set gps update rate to 10s fixes to get ready
       GPS.sendCommand(PMTK_SET_NMEA_UPDATE_100_MILLIHERTZ);     // 0.1 Hz update rate 
-      GPS.sendCommand(PMTK_API_SET_FIX_CTL_100_MILLIHERTZ);     // 0.1 Hz update rate 
+      //GPS.sendCommand(PMTK_API_SET_FIX_CTL_100_MILLIHERTZ);     // 0.1 Hz update rate 
       //Serial.println("entering standby");
       break;
     case BCGPS_MODE:
       GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);     // Set gps update rate to 1s fixes 
-      GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);     // Set gps update rate to 1s fixes 
       //Serial.println("entering gps mode");
       break;
   }
@@ -287,14 +292,14 @@ void onReceive(int packetSize) {
   }
 
   // if message is for this device, or broadcast, print details:
-  //Serial.println("Received from: 0x" + String(sender, HEX));
-  //Serial.println("Sent to: 0x" + String(recipient, HEX));
-  //Serial.println("Message ID: " + String(incomingMsgId));
-  //Serial.println("Message length: " + String(incomingLength));
-  //Serial.println("Message: " + incoming);
-  //Serial.println("RSSI: " + String(LoRa.packetRssi()));
-  //Serial.println("Snr: " + String(LoRa.packetSnr()));
-  //Serial.println();
+//  Serial.println("Received from: 0x" + String(sender, HEX));
+//  Serial.println("Sent to: 0x" + String(recipient, HEX));
+//  Serial.println("Message ID: " + String(incomingMsgId));
+//  Serial.println("Message length: " + String(incomingLength));
+//  Serial.println("Message: " + incoming);
+//  Serial.println("RSSI: " + String(LoRa.packetRssi()));
+//  Serial.println("Snr: " + String(LoRa.packetSnr()));
+//  Serial.println();
   
   // if the recipient isn't this device or broadcast,
   if (recipient != collar_id && recipient != broadcast) {
@@ -304,27 +309,18 @@ void onReceive(int packetSize) {
 
   // the base station has connected with us so switch to fast short-range comms
   if (recipient == collar_id) 
+  {
     LoRa.setSpreadingFactor(shortRangeSpreadingFactor);
+    LoRa.setCodingRate4(shortRangeCodingRateDenominator);
+  }
     
   time_of_last_message = millis();
 
-  if ((incoming==SLEEP)&&(mode!=SLEEP_MODE))
-  {
-    mode=SLEEP_MODE;
-    mode_change=1;
-  }
+  if ((incoming==SLEEP)&&(mode!=SLEEP_MODE)) {mode=SLEEP_MODE;mode_change=1;}
 
-  if ((incoming==WAKE)&&(mode!=STDBY_MODE))
-  {
-    mode=STDBY_MODE;
-    mode_change=1;
-  }
+  if ((incoming==STDBY)&&(mode!=STDBY_MODE)) {mode=STDBY_MODE;mode_change=1;}
 
-  if ((incoming==SEND_GPS)&&(mode!=BCGPS_MODE))
-  {
-    mode=BCGPS_MODE;
-    mode_change=1;
-  }
+  if ((incoming==BCGPS)&&(mode!=BCGPS_MODE)) {mode=BCGPS_MODE;mode_change=1;}
 
   
 
