@@ -42,6 +42,7 @@ class serviceRunner():
             if sentence.startswith('AWAKE'):  # this is a ping from the collar
                 return
 
+            #print(sentence)
             parsed = pynmea2.parse(sentence)
         #except:
         except Exception as e:

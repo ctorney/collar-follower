@@ -74,6 +74,7 @@ class BLE(BluetoothDispatcher):
                 print(self.message)
                 self.message = ''
         except:
+            self.message = ''
             pass
 
     def send_app_msg(self, text):
