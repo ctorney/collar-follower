@@ -43,7 +43,7 @@ class serviceRunner():
                 return
 
             #print(sentence)
-            parsed = pynmea2.parse(sentence)
+            parsed = pynmea2.parse(sentence, check=True)
         #except:
         except Exception as e:
             self.send_msg("parse_msg error: " + str(e))
