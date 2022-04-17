@@ -252,6 +252,7 @@ def standby_mode(collar_id):
     time_of_last_msg = time.monotonic()
     time_of_last_send = time.monotonic()
     time_refresh = 0
+    short_range_recv = False
     while True:
         if time.monotonic() - time_of_last_send > standby_send_interval:
             rfm9x.set_modem_config(LONG_RANGE_CONFIG)
@@ -262,10 +263,11 @@ def standby_mode(collar_id):
             #rfm9x.spreading_factor = SHORT_RANGE_SF
             rfm9x.set_modem_config(SHORT_RANGE_CONFIG)
             sleep(0.1)
-            packet = rfm9x.receive(timeout=10.0, from_id=collar_id)             # check if there's a message
+            packet = rfm9x.receive(timeout=2.0, from_id=collar_id)             # check if there's a message
             rfm9x.send(bytes(WAKE, "UTF-8"),destination=collar_id)             # send GPS instruction
             if packet is not None:
 
+                short_range_recv = True
                 time_of_last_msg = time.monotonic()
                 try:
                     packet_text = packet.decode()#str(packet, "ascii")
@@ -277,11 +279,15 @@ def standby_mode(collar_id):
 
         if time.monotonic() - time_refresh > screen_refresh:
             time_since_msg = time.monotonic() - time_of_last_msg 
-            screen_write("C" + str(collar_id) + " MODE: STANDBY\nHold A to start gps\nHold C to send sleep\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            if short_range_recv:
+                screen_write("C" + str(collar_id) + " MODE: STANDBY\nHold A to start gps\nHold C to send sleep\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
+            else:
+                screen_write("C" + str(collar_id) + " MODE: SWITCH\nPending short-range comms\nHold C to send sleep\nRS:" + str(rfm9x.last_rssi) + " LMT:" + str(time_since_msg))
             time_refresh = time.monotonic()
         
         if not button_A.value:
-            forward_mode(collar_id)
+            if short_range_recv:
+                forward_mode(collar_id)
         if not button_C.value:
             break
         if not ble.connected and not ble.advertising: 
@@ -292,6 +298,8 @@ def standby_mode(collar_id):
 
     send_sleep(collar_id)
     rfm9x.set_modem_config(LONG_RANGE_CONFIG)
+    if not short_range_recv:
+        send_sleep(collar_id)
     sleep(0.1)
 
     #rfm9x.spreading_factor = LONG_RANGE_SF
