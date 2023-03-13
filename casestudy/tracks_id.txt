@@ -1,0 +1,24 @@
+file_name	focal_individual_ID
+DJI_0001_clip1_TR.avi	2
+DJI_0002_clip1_TR.avi	2
+DJI_0003_clip1_TR.avi	2, 1476, 1947
+DJI_0005_clip1_TR.avi	3034
+DJI_0006_clip1_TR.avi	3501
+DJI_0007_clip1_TR.avi	3662, 3717
+DJI_0008_clip1_TR.avi	3782, 3824
+DJI_0009_clip1_TR.avi	3951, 4034
+DJI_0010_clip1_TR.avi	4114
+DJI_0023_clip1_TR.avi	4328
+DJI_0024_clip1_TR.avi	4373
+DJI_0024_clip2_TR.avi	4403
+DJI_0047_clip1_TR.avi	4506, 4524
+DJI_0048_clip1_TR.avi	13,464, 470
+DJI_0049_clip1_TR.avi	470
+DJI_0049_clip2_TR.avi	470, 873
+DJI_0053_clip1_TR.avi	931
+DJI_0054_clip1_TR.avi	931
+DJI_0055_clip1_TR.avi	1013,1047, 1048
+DJI_0055_clip2_TR.avi	1052, 1077
+DJI_0056_clip1_TR.avi	1104, 1699
+DJI_0057_clip1_TR.avi	1796
+DJI_0058_clip1_TR.avi	1796
